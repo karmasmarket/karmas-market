@@ -1,0 +1,19 @@
+{
+  "hosting": {
+    "site": "realistic-market-show",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "**/*.exe",
+      "**/*.sh",
+      "**/*.bat",
+      "capacitor.config.json",
+      "package.json",
+      "package-lock.json",
+      "android/**",
+      "www/**"
+    ]
+  }
+}

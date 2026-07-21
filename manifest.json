@@ -1,0 +1,42 @@
+{
+  "name": "Karmas Market",
+  "short_name": "Karmas",
+  "description": "Buy, Sell, Freelance & Apps — Nigeria's Digital Marketplace",
+  "start_url": "/index.html",
+  "display": "standalone",
+  "background_color": "#060e1e",
+  "theme_color": "#FFD700",
+  "orientation": "portrait",
+  "scope": "/",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["shopping", "business", "productivity"],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Marketplace",
+      "short_name": "Products",
+      "url": "/home.html",
+      "description": "Browse products"
+    },
+    {
+      "name": "Creator Studio",
+      "short_name": "Tools",
+      "url": "/home.html#tools",
+      "description": "Create flyers and ads"
+    }
+  ]
+}

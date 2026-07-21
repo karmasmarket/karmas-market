@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-7648896502866407"
+     crossorigin="anonymous"></script>
+
+<title>Karmas Market</title>
+
+<link rel="stylesheet" href="style.css">
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+
+<!-- Fabric.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+
+<!-- html2canvas -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<!-- jsPDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Flutterwave -->
+<script src="https://checkout.flutterwave.com/v3.js"></script>
+
+<style>
+
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:Arial,sans-serif;
+}
+
+body{
+background:#050505;
+color:white;
+overflow-x:hidden;
+padding-bottom:120px;
+}
+
+::-webkit-scrollbar{ width:5px; }
+::-webkit-scrollbar-thumb{ background:gold; border-radius:10px; }
+
+/* LOADER */
+#loader{
+position:fixed;
+top:0; left:0;
+width:100%; height:100vh;
+background:#060e1e;
+display:flex;
+align-items:center;
+justify-content:center;
+flex-direction:column;
+z-index:999999;
+}
+
+@keyframes spin{ 100%{ transform:rotate(360deg); } }
+
+/* SPLASH DOTS */
+.splash-dot{
+width:10px; height:10px;
+background:gold;
+border-radius:50%;
+animation:splashBounce 1.2s infinite ease-in-out;
+}
+.splash-dot:nth-child(2){ animation-delay:0.2s; }
+.splash-dot:nth-child(3){ animation-delay:0.4s; }
+@keyframes splashBounce{
+0%,80%,100%{ transform:scale(0.6); opacity:0.4; }
+40%{ transform:scale(1); opacity:1; }
+}
+
+/* HEADER */
+header{
+position:sticky; top:0; z-index:1000;
+padding:18px;
+background:rgba(10,10,10,.92);
+backdrop-filter:blur(10px);
+border-bottom:1px solid rgba(255,215,0,.12);
+}
+.header-flex{
+display:flex;
+justify-content:space-between;
+align-items:center;
+}
+header h1{ font-size:28px; font-weight:800; color:gold; }
+header p{ color:#999; font-size:13px; margin-top:4px; }
+
+/* PAGE */
+.page{ display:none; padding:18px; animation:fade .35s ease; }
+.page.active{ display:block; }
+@keyframes fade{
+from{ opacity:0; transform:translateY(10px); }
+to{ opacity:1; transform:translateY(0); }
+}
+
+.page-title{ font-size:25px; font-weight:800; color:gold; margin-bottom:20px; }
+
+.search{
+width:100%; padding:15px;
+border:none; outline:none;
+border-radius:16px;
+background:rgba(255,255,255,.04);
+backdrop-filter:blur(10px);
+color:white; margin-bottom:20px;
+}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(240px,1fr));
+gap:18px;
+}
+.card{
+background:linear-gradient(145deg,#101010,#181818);
+border-radius:22px; overflow:hidden;
+border:1px solid rgba(255,215,0,.08);
+transition:.3s;
+box-shadow:0 10px 25px rgba(0,0,0,.45);
+}
+.card:hover{
+transform:translateY(-10px) scale(1.02);
+border:1px solid rgba(255,215,0,.3);
+}
+.card img{ width:100%; height:220px; object-fit:cover; }
+.card-body{ padding:16px; }
+.price{ color:gold; font-size:20px; font-weight:bold; margin:10px 0; }
+.small{ color:#aaa; font-size:13px; line-height:1.6; }
+
+.sell-box,.tool,.profile-box{
+background:linear-gradient(145deg,#111,#181818);
+padding:20px; border-radius:22px;
+border:1px solid rgba(255,215,0,.08);
+margin-bottom:22px;
+}
+
+button{
+width:100%; padding:13px;
+border:none; border-radius:14px;
+background:gold; font-weight:bold;
+cursor:pointer; margin-top:10px;
+}
+.alt{ background:#1f1f1f; color:white; border:1px solid rgba(255,215,0,.1); }
+
+/* FOOTER */
+.karmas-footer{
+background:#060e1e;
+padding:40px 20px 30px;
+border-top:2px solid rgba(255,215,0,0.4);
+margin-top:40px;
+}
+.footer-links{
+display:flex; flex-wrap:wrap;
+justify-content:center; gap:16px;
+margin:20px 0;
+}
+.footer-links a{
+color:#FFD700; font-size:12px;
+cursor:pointer; text-decoration:none;
+letter-spacing:0.5px;
+}
+.footer-links a:hover{ text-decoration:underline; }
+
+@media(max-width:768px){
+.grid{ grid-template-columns:1fr; }
+header h1{ font-size:24px; }
+}
+
+</style>
+
+</head>
+
+<body>
+<!-- =====================
+     SPLASH / LOADER
+     (replaces old loader — shows logo on app open)
+===================== -->
+<div id="loader">
+
+  <!-- KARMAS MARKET LOGO -->
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 580" width="160" height="186">
+    <defs>
+      <linearGradient id="goldGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%"   stop-color="#FFF9C4"/>
+        <stop offset="30%"  stop-color="#FFD700"/>
+        <stop offset="70%"  stop-color="#F0A500"/>
+        <stop offset="100%" stop-color="#B8860B"/>
+      </linearGradient>
+      <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%"   stop-color="#0d2040"/>
+        <stop offset="100%" stop-color="#060e1e"/>
+      </linearGradient>
+      <radialGradient id="jewelGrad" cx="35%" cy="30%" r="70%">
+        <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.9"/>
+        <stop offset="40%"  stop-color="#FFD700"/>
+        <stop offset="100%" stop-color="#8B6000"/>
+      </radialGradient>
+      <filter id="softShadow">
+        <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.6"/>
+      </filter>
+      <filter id="goldGlow">
+        <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur"/>
+        <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <rect width="500" height="580" fill="url(#bgGrad)" rx="0"/>
+    <rect x="18" y="18" width="464" height="544" fill="none" stroke="url(#goldGrad)" stroke-width="3" rx="4"/>
+    <rect x="26" y="26" width="448" height="528" fill="none" stroke="#FFD700" stroke-width="0.8" opacity="0.3" rx="2"/>
+    <line x1="18" y1="60"  x2="60"  y2="18" stroke="#FFD700" stroke-width="1.5" opacity="0.5"/>
+    <line x1="440" y1="18" x2="482" y2="60" stroke="#FFD700" stroke-width="1.5" opacity="0.5"/>
+    <line x1="18" y1="520" x2="60"  y2="562" stroke="#FFD700" stroke-width="1.5" opacity="0.5"/>
+    <line x1="440" y1="562" x2="482" y2="520" stroke="#FFD700" stroke-width="1.5" opacity="0.5"/>
+    <path d="M130,205 L370,205 L370,235 Q370,242 362,242 L138,242 Q130,242 130,235 Z" fill="url(#goldGrad)" filter="url(#softShadow)"/>
+    <line x1="140" y1="214" x2="360" y2="214" stroke="#FFF9C4" stroke-width="1.5" opacity="0.4"/>
+    <path d="M148,205 L165,130 L185,205 Z" fill="url(#goldGrad)" filter="url(#softShadow)"/>
+    <path d="M215,205 L250,68 L285,205 Z" fill="url(#goldGrad)" filter="url(#softShadow)"/>
+    <path d="M315,205 L335,130 L352,205 Z" fill="url(#goldGrad)" filter="url(#softShadow)"/>
+    <path d="M130,205 Q139,185 148,205" fill="url(#goldGrad)"/>
+    <path d="M185,205 Q200,185 215,205" fill="url(#goldGrad)"/>
+    <path d="M285,205 Q300,185 315,205" fill="url(#goldGrad)"/>
+    <path d="M352,205 Q361,185 370,205" fill="url(#goldGrad)"/>
+    <polygon points="165,125 173,133 165,141 157,133" fill="url(#jewelGrad)" stroke="#FFD700" stroke-width="1.5" filter="url(#softShadow)"/>
+    <polygon points="250,62 263,75 250,88 237,75" fill="url(#jewelGrad)" stroke="#FFD700" stroke-width="2" filter="url(#goldGlow)"/>
+    <circle cx="247" cy="72" r="3" fill="#ffffff" opacity="0.5"/>
+    <polygon points="335,125 343,133 335,141 327,133" fill="url(#jewelGrad)" stroke="#FFD700" stroke-width="1.5" filter="url(#softShadow)"/>
+    <circle cx="185" cy="224" r="5" fill="url(#jewelGrad)" stroke="#FFD700" stroke-width="1"/>
+    <circle cx="250" cy="224" r="6" fill="url(#jewelGrad)" stroke="#FFD700" stroke-width="1"/>
+    <circle cx="315" cy="224" r="5" fill="url(#jewelGrad)" stroke="#FFD700" stroke-width="1"/>
+    <rect x="112" y="237" width="68" height="240" rx="6" fill="url(#goldGrad)" filter="url(#softShadow)"/>
+    <rect x="118" y="245" width="20" height="224" rx="4" fill="#FFF9C4" opacity="0.18"/>
+    <path d="M184,237 L388,237 L388,295 L184,315 Z" fill="url(#goldGrad)" filter="url(#softShadow)"/>
+    <path d="M184,373 L388,443 L388,477 L184,477 Z" fill="url(#goldGrad)" filter="url(#softShadow)"/>
+    <polygon points="184,315 305,342 184,373" fill="#060e1e"/>
+    <line x1="184" y1="315" x2="305" y2="342" stroke="url(#goldGrad)" stroke-width="1.5" opacity="0.25"/>
+    <line x1="184" y1="373" x2="305" y2="342" stroke="url(#goldGrad)" stroke-width="1.5" opacity="0.25"/>
+    <line x1="50" y1="536" x2="212" y2="536" stroke="url(#goldGrad)" stroke-width="1.2" opacity="0.7"/>
+    <line x1="288" y1="536" x2="450" y2="536" stroke="url(#goldGrad)" stroke-width="1.2" opacity="0.7"/>
+    <polygon points="250,529 258,536 250,543 242,536" fill="url(#goldGrad)"/>
+    <text x="250" y="558" font-family="Georgia,serif" font-size="38" font-weight="bold"
+          fill="url(#goldGrad)" text-anchor="middle" letter-spacing="14" filter="url(#goldGlow)">KARMAS</text>
+    <text x="250" y="578" font-family="Arial,sans-serif" font-size="11.5"
+          fill="#94a3b8" text-anchor="middle" letter-spacing="7">MARKETPLACE</text>
+  </svg>
+
+  <!-- Loading dots -->
+  <div style="display:flex; gap:10px; margin-top:28px; align-items:center; justify-content:center;">
+    <div class="splash-dot"></div>
+    <div class="splash-dot"></div>
+    <div class="splash-dot"></div>
+  </div>
+  <p style="color:#888; font-size:11px; margin-top:14px; letter-spacing:3px;">LOADING...</p>
+
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="header-flex">
+    <div style="display:flex; align-items:center; gap:12px;">
+
+      <!-- Small logo in header -->
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 580" width="38" height="44" style="flex-shrink:0;">
+        <defs>
+          <linearGradient id="hGold" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stop-color="#FFF9C4"/>
+            <stop offset="50%" stop-color="#FFD700"/>
+            <stop offset="100%" stop-color="#B8860B"/>
+          </linearGradient>
+        </defs>
+        <rect width="500" height="580" fill="#0d2040" rx="0"/>
+        <path d="M130,205 L370,205 L370,235 Q370,242 362,242 L138,242 Q130,242 130,235 Z" fill="url(#hGold)"/>
+        <path d="M148,205 L165,130 L185,205 Z" fill="url(#hGold)"/>
+        <path d="M215,205 L250,68 L285,205 Z" fill="url(#hGold)"/>
+        <path d="M315,205 L335,130 L352,205 Z" fill="url(#hGold)"/>
+        <path d="M130,205 Q139,185 148,205" fill="url(#hGold)"/>
+        <path d="M185,205 Q200,185 215,205" fill="url(#hGold)"/>
+        <path d="M285,205 Q300,185 315,205" fill="url(#hGold)"/>
+        <path d="M352,205 Q361,185 370,205" fill="url(#hGold)"/>
+        <rect x="112" y="237" width="68" height="240" rx="6" fill="url(#hGold)"/>
+        <path d="M184,237 L388,237 L388,295 L184,315 Z" fill="url(#hGold)"/>
+        <path d="M184,373 L388,443 L388,477 L184,477 Z" fill="url(#hGold)"/>
+        <polygon points="184,315 305,342 184,373" fill="#0d2040"/>
+      </svg>
+
+      <div>
+        <h1>Karmas Market</h1>
+        <p>Buy • Sell • Freelance • Apps</p>
+      </div>
+    </div>
+
+    <div onclick="showPage('notificationPage')" style="position:relative; font-size:24px; cursor:pointer;">
+      🔔
+      <span id="notificationCount" style="position:absolute; top:-8px; right:-10px; background:red; color:white; font-size:12px; padding:3px 6px; border-radius:50%; display:none;">0</span>
+    </div>
+  </div>
+</header>
+<!-- PRODUCTS PAGE -->
+<section id="products" class="page active">
+  <h2 class="page-title">Marketplace</h2>
+  <input id="search" class="search" type="text" placeholder="Search products..." onkeyup="searchItems()">
+  <div class="sell-box">
+    <h3 style="color:gold;">Post Product</h3>
+    <input id="sellerName" placeholder="Seller Name">
+    <input id="itemTitle" placeholder="Product Title">
+    <input id="itemPrice" type="number" placeholder="Price">
+    <textarea id="itemDescription" placeholder="Description"></textarea>
+    <input id="itemImageFile" type="file" accept="image/*">
+    <button onclick="postItem()">Post Product</button>
+  </div>
+  <div id="itemFeed" class="grid"></div>
+</section>
+
+<!-- SERVICES PAGE -->
+<section id="services" class="page">
+  <h2 class="page-title">Freelance Services</h2>
+  <div class="grid">
+    <div class="card"><div class="card-body"><h3>Logo Design</h3><p class="small">Professional branding solutions</p><button onclick="openFreelancers('Logo Design')">Hire Now</button></div></div>
+    <div class="card"><div class="card-body"><h3>Graphic Design</h3><p class="small">Flyers, banners and social media graphics</p><button onclick="openFreelancers('Graphic Design')">Hire Now</button></div></div>
+    <div class="card"><div class="card-body"><h3>Copywriting</h3><p class="small">Sales pages, product descriptions and ads</p><button onclick="openFreelancers('Copywriting')">Hire Now</button></div></div>
+    <div class="card"><div class="card-body"><h3>Web Development</h3><p class="small">Websites and web applications</p><button onclick="openFreelancers('Web Development')">Hire Now</button></div></div>
+    <div class="card"><div class="card-body"><h3>Mobile App Development</h3><p class="small">Android and cross-platform apps</p><button onclick="openFreelancers('Mobile App Development')">Hire Now</button></div></div>
+    <div class="card"><div class="card-body"><h3>Digital Marketing</h3><p class="small">SEO, social media and advertising campaigns</p><button onclick="openFreelancers('Digital Marketing')">Hire Now</button></div></div>
+  </div>
+</section>
+
+<!-- TOOLS PAGE -->
+<section id="tools" class="page">
+  <h2 class="page-title">Creator Studio</h2>
+  <div class="grid">
+    <div class="card"><div class="card-body"><h3>🎨 Logo Maker</h3><p>Create business logos</p><button onclick="openLogoMaker()">Open</button></div></div>
+    <div class="card"><div class="card-body"><h3>📢 Ad Maker</h3><p>Create flyers, banners & marketing ads</p><button onclick="openAdMaker()">Open</button></div></div>
+    <div class="card"><div class="card-body"><h3>🖼 Banner Creator</h3><p>Design flyers and banners</p><button onclick="openAdMaker()">Open</button></div></div>
+    <div class="card"><div class="card-body"><h3>🎬 Animation Studio</h3><p>Create animated advertisements & videos</p><button onclick="openAdMaker()">Open</button></div></div>
+  </div>
+  <br>
+  <div class="sell-box">
+    <h3 style="color:gold;">Quick Tools</h3>
+    <button onclick="openAdMaker()">🎨 Flyer Designer</button>
+    <button onclick="openAdMaker()">📢 Ad Creator</button>
+    <button onclick="generateAIContent()">🤖 AI Writer</button>
+    <button onclick="openAdMaker()">🎬 Video Editor</button>
+    <button onclick="openAdMaker()">🍽️ Restaurant Flyer Template</button>
+    <button onclick="openAdMaker()">💼 Business Flyer Template</button>
+    <button onclick="exportPNG()">Export PNG</button>
+    <button onclick="exportPDF()">Export PDF</button>
+  </div>
+  <div class="sell-box">
+    <h3 style="color:gold;">AI Ad Generator</h3>
+    <input id="aiPrompt" placeholder="Describe your business">
+    <button onclick="generateAd()">Generate Ad</button>
+    <textarea id="aiResult" style="width:100%; height:150px; margin-top:10px;"></textarea>
+  </div>
+  <div class="sell-box">
+    <h3 style="color:gold;">Template Marketplace</h3>
+    <div id="templateFeed" class="grid"></div>
+  </div>
+  <div id="toolContent" class="sell-box">
+    <h3 style="color:gold;">Tool Workspace</h3>
+    <p class="small">Select a creator tool to begin.</p>
+  </div>
+  <div id="layerPanel" class="sell-box">
+    <h3 style="color:gold;">Layers</h3>
+    <p class="small">Layer controls will appear here.</p>
+  </div>
+</section>
+
+<!-- LOGO MAKER PAGE -->
+<section id="logoMakerPage" class="page">
+  <h2 class="page-title">Logo Maker</h2>
+  <input id="logoText" class="search" placeholder="Business Name">
+  <button onclick="generateLogo()">Generate Logo</button>
+  <div id="logoPreview" style="margin-top:20px; text-align:center; font-size:40px; font-weight:bold; color:gold;"></div>
+</section>
+
+<!-- FREELANCER PAGE -->
+<section id="freelancerPage" class="page">
+  <button onclick="closeFreelancers()">← Back</button>
+  <h2 class="page-title">Freelancers</h2>
+  <div id="freelancerFeed" class="grid">Loading freelancers...</div>
+</section>
+
+<!-- SELLER PROFILE PAGE -->
+<section id="sellerProfilePage" class="page">
+  <button onclick="showPage('products')">← Back</button>
+  <h2 class="page-title">Seller Profile</h2>
+  <div id="sellerProfile"></div>
+  <h3 style="color:gold; margin-top:25px;">Seller Products</h3>
+  <div id="sellerProducts" class="grid"></div>
+</section>
+
+<!-- PROMOTION PAGE -->
+<section id="promotionPage" class="page">
+  <h2 class="page-title">Affiliate Promotion</h2>
+  <div class="sell-box">
+    <input id="promoTitle" placeholder="Promotion Title">
+    <textarea id="promoDescription" placeholder="Promotion Description"></textarea>
+    <input id="promoLink" placeholder="Affiliate Link">
+    <select id="affiliateType">
+      <option value="">Select Type</option>
+      <option value="Jumia">Jumia</option>
+      <option value="Amazon">Amazon</option>
+      <option value="Konga">Konga</option>
+      <option value="Expertnaire">Expertnaire</option>
+      <option value="Other">Other</option>
+    </select>
+    <select id="adPricingTier">
+      <option value="basic">Basic — ₦2,500</option>
+      <option value="standard">Standard — ₦5,000</option>
+      <option value="featured">Featured — ₦10,000</option>
+    </select>
+    <input type="file" id="affiliateImage" accept="image/*">
+    <button onclick="submitPromotion()">Submit Promotion</button>
+  </div>
+</section>
+
+<!-- AFFILIATE MARKETPLACE -->
+<section id="affiliateMarketplace" class="page">
+  <h2 class="page-title">Affiliate Deals</h2>
+  <div id="affiliateFeed" class="grid"></div>
+</section>
+
+<!-- CLIENT DASHBOARD -->
+<section id="clientDashboard" class="page">
+  <h2 class="page-title">Client Dashboard</h2>
+  <div id="clientOrders" class="grid"></div>
+</section>
+<!-- FREELANCER DASHBOARD -->
+
+<section id="freelancerDashboard" class="page">
+
+  <h2 class="page-title">Freelancer Dashboard</h2>
+
+  <div id="freelancerEarnings" class="sell-box"><h3>Earnings Loading...</h3></div>
+
+  <div id="freelancerOrders" class="grid"></div>
+
+</section>
+
+
+
+<!-- APP MARKETPLACE -->
+
+<section id="appMarketplace" class="page">
+
+  <h2 class="page-title">Developer Marketplace</h2>
+
+  <div class="sell-box">
+
+    <h3 style="color:gold;">Post Your App</h3>
+
+    <input id="appName" placeholder="App Name">
+
+    <input id="developerName" placeholder="Developer Name">
+
+    <input id="appCategory" placeholder="Category">
+
+    <input id="appPrice" type="number" placeholder="Price">
+
+    <input id="appLink" placeholder="APK / Website Link">
+
+    <input id="appImage" placeholder="Image URL">
+
+    <textarea id="appDescription" placeholder="Description"></textarea>
+
+    <button onclick="postApp()">Publish App</button>
+
+  </div>
+
+  <div id="appFeed" class="grid"></div>
+
+</section>
+
+
+
+<!-- CHAT PAGE -->
+
+<section id="chatPage" class="page">
+
+  <h2 class="page-title">Live Chat</h2>
+
+  <div id="chatMessages" class="chat-box"></div>
+
+  <input id="chatInput" class="search" placeholder="Type your message...">
+
+  <button onclick="sendMessage()">Send Message</button>
+
+</section>
+
+
+
+<!-- CONVERSATIONS PAGE -->
+
+<section id="conversationsPage" class="page">
+
+  <h2 class="page-title">Conversations</h2>
+
+  <div id="conversationList" style="display:flex; flex-direction:column; gap:15px;"></div>
+
+</section>
+
+
+
+<!-- NOTIFICATIONS PAGE -->
+
+<section id="notificationPage" class="page">
+
+  <h2 class="page-title">Notifications</h2>
+
+  <div id="notificationFeed" style="display:flex; flex-direction:column; gap:15px;"></div>
+
+</section>
+
+
+
+<!-- ORDERS PAGE -->
+
+<section id="ordersPage" class="page">
+
+  <h2 class="page-title">Orders</h2>
+
+  <div id="ordersFeed" class="grid"></div>
+
+</section>
+
+
+
+<!-- WALLET PAGE -->
+
+<section id="walletPage" class="page">
+
+  <h2 class="page-title">Wallet</h2>
+
+  <div class="profile-box">
+
+    <h3 style="color:gold;">Available Balance</h3>
+
+    <h1 id="walletBalance" style="margin-top:15px; color:gold;">₦0</h1>
+
+    <button onclick="withdrawWallet()">Withdraw Funds</button>
+
+  </div>
+
+</section>
+
+
+
+<!-- ANALYTICS PAGE -->
+
+<section id="analyticsPage" class="page">
+
+  <h2 class="page-title">Marketplace Analytics</h2>
+
+  <div class="grid">
+
+    <div class="card"><div class="card-body"><h3>Total Products</h3><h1 id="totalProducts" style="color:gold;">0</h1></div></div>
+
+    <div class="card"><div class="card-body"><h3>Total Freelancers</h3><h1 id="totalFreelancers" style="color:gold;">0</h1></div></div>
+
+    <div class="card"><div class="card-body"><h3>Total Apps</h3><h1 id="totalApps" style="color:gold;">0</h1></div></div>
+
+    <div class="card"><div class="card-body"><h3>Total Orders</h3><h1 id="totalOrders" style="color:gold;">0</h1></div></div>
+
+    <div class="card"><div class="card-body"><h3>Total Revenue</h3><h1 id="totalRevenue" style="color:gold;">₦0</h1></div></div>
+
+    <div class="card"><div class="card-body"><h3>Affiliate Clicks</h3><h1 id="totalClicks" style="color:gold;">0</h1></div></div>
+
+  </div>
+
+  <br>
+
+  <canvas id="analyticsChart" height="120"></canvas>
+
+</section>
+
+
+
+<!-- PROFILE PAGE -->
+
+<section id="profile" class="page">
+
+  <div class="profile-box">
+
+    <h2 style="color:gold;">Your Profile</h2>
+
+    <p id="userEmail" class="small">Loading...</p>
+
+    <br>
+
+    <button onclick="showPage('walletPage')">Wallet</button>
+
+    <button onclick="showPage('ordersPage')">Orders</button>
+
+    <button onclick="showPage('conversationsPage')">Messages</button>
+
+    <button onclick="showPage('analyticsPage')">Analytics</button>
+
+    <button onclick="logout()" class="alt">Logout</button>
+
+  </div>
+
+</section>
+
+
+
+<!-- =====================
+
+     POLICY PAGES
+
+===================== -->
+
+
+
+<!-- ABOUT -->
+
+<section id="aboutPage" class="page">
+
+  <h2 class="page-title">About Karmas Market</h2>
+
+  <div class="sell-box">
+
+    <h3 style="color:gold;">Who We Are</h3>
+
+    <p class="small">Karmas Market is a Nigerian digital marketplace built to empower entrepreneurs, freelancers, creators, and businesses to buy, sell, and grow online. We provide a platform where digital products, services, apps, and creative tools come together in one place.</p>
+
+    <br>
+
+    <h3 style="color:gold;">Our Mission</h3>
+
+    <p class="small">To make digital commerce accessible, affordable, and secure for every Nigerian — from solo freelancers to growing businesses.</p>
+
+    <br>
+
+    <h3 style="color:gold;">What We Offer</h3>
+
+    <p class="small">• <strong style="color:gold;">Products</strong> — Buy and sell digital goods<br>
+
+       • <strong style="color:gold;">Services</strong> — Hire and offer freelance services<br>
+
+       • <strong style="color:gold;">Apps</strong> — Discover and distribute apps<br>
+
+       • <strong style="color:gold;">Creator Tools</strong> — Design flyers, ads and videos with Karma Ad Maker</p>
+
+    <br>
+
+    <h3 style="color:gold;">Contact</h3>
+
+    <p class="small">Email: support@karmasmarket.ng<br>Website: karmas-services.com.ng<br>Nigeria 🇳🇬</p>
+
+  </div>
+
+</section>
+
+<!-- CONTACT -->
+<section id="contactPage" class="page">
+  <h2 class="page-title">Contact Us</h2>
+  <div class="sell-box">
+    <h3 style="color:gold;">Get In Touch</h3>
+    <p class="small">We're here to help. Reach out through any of the channels below.</p>
+    <br>
+    <p class="small">📧 <strong>Email:</strong> support@karmasmarket.ng</p>
+    <p class="small">🌐 <strong>Website:</strong> karmas-services.com.ng</p>
+    <br>
+    <h3 style="color:gold;">Send a Message</h3>
+    <input id="contactName" placeholder="Your Name">
+    <input id="contactEmail" placeholder="Your Email">
+    <textarea id="contactMessage" placeholder="Your Message" style="width:100%; height:120px; margin-top:10px; background:rgba(255,255,255,.04); color:white; border:none; border-radius:14px; padding:14px;"></textarea>
+    <button onclick="submitContact()">Send Message</button>
+    <div id="contactResult" style="margin-top:10px; color:gold; font-size:13px;"></div>
+  </div>
+</section>
+
+<!-- PRIVACY POLICY -->
+<section id="privacyPage" class="page">
+  <h2 class="page-title">Privacy Policy</h2>
+  <div class="sell-box">
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+    <h3 style="color:gold;">Information We Collect</h3>
+    <p class="small">We collect information you provide when registering, listing products, or contacting us — including your name, email address, and payment details. We also collect usage data such as pages visited and features used.</p><br>
+    <h3 style="color:gold;">How We Use Your Information</h3>
+    <p class="small">Your information is used to operate the platform, process transactions, communicate with you, improve our services, and comply with legal obligations.</p><br>
+    <h3 style="color:gold;">Data Sharing</h3>
+    <p class="small">We do not sell your personal data. We may share data with payment processors (Flutterwave) and service providers strictly necessary to operate Karmas Market.</p><br>
+    <h3 style="color:gold;">Data Security</h3>
+    <p class="small">We use Firebase Authentication and industry-standard security practices to protect your data.</p><br>
+    <h3 style="color:gold;">Your Rights</h3>
+    <p class="small">You may request access to, correction of, or deletion of your personal data by contacting support@karmasmarket.ng.</p>
+  </div>
+</section>
+
+<!-- TERMS OF SERVICE -->
+<section id="termsPage" class="page">
+  <h2 class="page-title">Terms of Service</h2>
+  <div class="sell-box">
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+    <h3 style="color:gold;">Acceptance of Terms</h3>
+    <p class="small">By accessing or using Karmas Market, you agree to be bound by these Terms of Service.</p><br>
+    <h3 style="color:gold;">User Accounts</h3>
+    <p class="small">You must provide accurate information when creating an account. You are responsible for all activity that occurs under your account.</p><br>
+    <h3 style="color:gold;">Buying & Selling</h3>
+    <p class="small">Sellers are responsible for the accuracy of their listings. All transactions are subject to our escrow and payment policies.</p><br>
+    <h3 style="color:gold;">Prohibited Activities</h3>
+    <p class="small">You may not use Karmas Market to sell illegal goods, engage in fraud, spam other users, infringe intellectual property rights, or violate any Nigerian law.</p><br>
+    <h3 style="color:gold;">Commission & Fees</h3>
+    <p class="small">Karmas Market charges a commission on successful transactions. Rates vary by category and are displayed at the time of listing.</p><br>
+    <h3 style="color:gold;">Governing Law</h3>
+    <p class="small">These terms are governed by the laws of the Federal Republic of Nigeria.</p>
+  </div>
+</section>
+
+<!-- COMMUNITY GUIDELINES -->
+<section id="communityPage" class="page">
+  <h2 class="page-title">Community Guidelines</h2>
+  <div class="sell-box">
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+    <h3 style="color:gold;">Be Respectful</h3>
+    <p class="small">Treat all users with respect. Harassment, hate speech, or abuse of any kind will not be tolerated.</p><br>
+    <h3 style="color:gold;">Be Honest</h3>
+    <p class="small">List only what you can deliver. Fraudulent activity will result in permanent account removal.</p><br>
+    <h3 style="color:gold;">Protect Privacy</h3>
+    <p class="small">Do not share other users' personal information without their consent.</p><br>
+    <h3 style="color:gold;">No Spam</h3>
+    <p class="small">Do not send unsolicited messages or engage in any activity that disrupts the platform.</p><br>
+    <h3 style="color:gold;">Report Violations</h3>
+    <p class="small">Report violations to support@karmasmarket.ng.</p>
+  </div>
+</section>
+
+<!-- COOKIE POLICY -->
+<section id="cookiePage" class="page">
+  <h2 class="page-title">Cookie Policy</h2>
+  <div class="sell-box">
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+    <h3 style="color:gold;">What Are Cookies</h3>
+    <p class="small">Cookies are small text files stored on your device that help us remember your preferences and improve your experience.</p><br>
+    <h3 style="color:gold;">How We Use Cookies</h3>
+    <p class="small">We use cookies to keep you logged in, remember your settings, and analyse platform usage.</p><br>
+    <h3 style="color:gold;">Managing Cookies</h3>
+    <p class="small">You can control cookies through your browser settings. Disabling cookies may affect some features.</p><br>
+    <h3 style="color:gold;">Third-Party Cookies</h3>
+    <p class="small">Firebase and Flutterwave may set their own cookies which we do not control.</p>
+  </div>
+</section>
+
+<!-- REFUND POLICY -->
+<section id="refundPage" class="page">
+  <h2 class="page-title">Refund Policy</h2>
+  <div class="sell-box">
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+    <h3 style="color:gold;">Digital Products</h3>
+    <p class="small">All sales are final once a product has been downloaded or accessed. Refunds are only issued where the product is proven to be significantly different from its description.</p><br>
+    <h3 style="color:gold;">Services / Freelancing</h3>
+    <p class="small">Funds are held in escrow until the buyer confirms delivery. If a seller fails to deliver, the buyer may raise a dispute and receive a full refund.</p><br>
+    <h3 style="color:gold;">How to Request a Refund</h3>
+    <p class="small">Contact support@karmasmarket.ng within 7 days of purchase with your order details.</p><br>
+    <h3 style="color:gold;">Approved Refunds</h3>
+    <p class="small">Approved refunds are returned to your Karmas Wallet within 5-7 business days.</p>
+  </div>
+</section>
+
+<!-- SELLER POLICY -->
+<section id="sellerPolicyPage" class="page">
+  <h2 class="page-title">Seller Policy</h2>
+  <div class="sell-box">
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+    <h3 style="color:gold;">Eligibility</h3>
+    <p class="small">Anyone with a verified account may sell on the platform. You must be 18 years or older.</p><br>
+    <h3 style="color:gold;">Listing Requirements</h3>
+    <p class="small">All listings must be accurate, clearly described, and priced in Nigerian Naira (₦).</p><br>
+    <h3 style="color:gold;">Prohibited Items</h3>
+    <p class="small">You may not sell illegal content, stolen goods, counterfeit products, adult content, or anything that violates Nigerian law.</p><br>
+    <h3 style="color:gold;">Commission</h3>
+    <p class="small">Karmas Market deducts a commission from each successful sale. The rate depends on your product category.</p><br>
+    <h3 style="color:gold;">Payouts</h3>
+    <p class="small">Earnings are credited to your Karmas Wallet and are withdrawable to your Nigerian bank account.</p>
+  </div>
+</section>
+
+<!-- COPYRIGHT & DMCA -->
+<section id="copyrightPage" class="page">
+  <h2 class="page-title">Copyright & DMCA Policy</h2>
+  <div class="sell-box">
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+    <h3 style="color:gold;">Intellectual Property</h3>
+    <p class="small">All content you upload must be your original work or properly licensed. You retain ownership but grant Karmas Market a licence to display it on the platform.</p><br>
+    <h3 style="color:gold;">DMCA Takedown Requests</h3>
+    <p class="small">If you believe your copyrighted work has been used without permission, send a written notice to support@karmasmarket.ng with your contact details and the URL of the infringing content.</p><br>
+    <h3 style="color:gold;">Our Response</h3>
+    <p class="small">We will review all valid DMCA notices and remove infringing content within 5 business days.</p>
+  </div>
+</section>
+<!-- CONTACT -->
+
+<section id="contactPage" class="page">
+
+  <h2 class="page-title">Contact Us</h2>
+
+  <div class="sell-box">
+
+    <h3 style="color:gold;">Get In Touch</h3>
+
+    <p class="small">We're here to help. Reach out through any of the channels below.</p>
+
+    <br>
+
+    <p class="small">📧 <strong>Email:</strong> support@karmasmarket.ng</p>
+
+    <p class="small">🌐 <strong>Website:</strong> karmas-services.com.ng</p>
+
+    <br>
+
+    <h3 style="color:gold;">Send a Message</h3>
+
+    <input id="contactName" placeholder="Your Name">
+
+    <input id="contactEmail" placeholder="Your Email">
+
+    <textarea id="contactMessage" placeholder="Your Message" style="width:100%; height:120px; margin-top:10px; background:rgba(255,255,255,.04); color:white; border:none; border-radius:14px; padding:14px;"></textarea>
+
+    <button onclick="submitContact()">Send Message</button>
+
+    <div id="contactResult" style="margin-top:10px; color:gold; font-size:13px;"></div>
+
+  </div>
+
+</section>
+
+
+
+<!-- PRIVACY POLICY -->
+
+<section id="privacyPage" class="page">
+
+  <h2 class="page-title">Privacy Policy</h2>
+
+  <div class="sell-box">
+
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+
+    <h3 style="color:gold;">Information We Collect</h3>
+
+    <p class="small">We collect information you provide when registering, listing products, or contacting us — including your name, email address, and payment details. We also collect usage data such as pages visited and features used.</p><br>
+
+    <h3 style="color:gold;">How We Use Your Information</h3>
+
+    <p class="small">Your information is used to operate the platform, process transactions, communicate with you, improve our services, and comply with legal obligations.</p><br>
+
+    <h3 style="color:gold;">Data Sharing</h3>
+
+    <p class="small">We do not sell your personal data. We may share data with payment processors (Flutterwave) and service providers strictly necessary to operate Karmas Market.</p><br>
+
+    <h3 style="color:gold;">Data Security</h3>
+
+    <p class="small">We use Firebase Authentication and industry-standard security practices to protect your data.</p><br>
+
+    <h3 style="color:gold;">Your Rights</h3>
+
+    <p class="small">You may request access to, correction of, or deletion of your personal data by contacting support@karmasmarket.ng.</p>
+
+  </div>
+
+</section>
+
+
+
+<!-- TERMS OF SERVICE -->
+
+<section id="termsPage" class="page">
+
+  <h2 class="page-title">Terms of Service</h2>
+
+  <div class="sell-box">
+
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+
+    <h3 style="color:gold;">Acceptance of Terms</h3>
+
+    <p class="small">By accessing or using Karmas Market, you agree to be bound by these Terms of Service.</p><br>
+
+    <h3 style="color:gold;">User Accounts</h3>
+
+    <p class="small">You must provide accurate information when creating an account. You are responsible for all activity that occurs under your account.</p><br>
+
+    <h3 style="color:gold;">Buying & Selling</h3>
+
+    <p class="small">Sellers are responsible for the accuracy of their listings. All transactions are subject to our escrow and payment policies.</p><br>
+
+    <h3 style="color:gold;">Prohibited Activities</h3>
+
+    <p class="small">You may not use Karmas Market to sell illegal goods, engage in fraud, spam other users, infringe intellectual property rights, or violate any Nigerian law.</p><br>
+
+    <h3 style="color:gold;">Commission & Fees</h3>
+
+    <p class="small">Karmas Market charges a commission on successful transactions. Rates vary by category and are displayed at the time of listing.</p><br>
+
+    <h3 style="color:gold;">Governing Law</h3>
+
+    <p class="small">These terms are governed by the laws of the Federal Republic of Nigeria.</p>
+
+  </div>
+
+</section>
+
+
+
+<!-- COMMUNITY GUIDELINES -->
+
+<section id="communityPage" class="page">
+
+  <h2 class="page-title">Community Guidelines</h2>
+
+  <div class="sell-box">
+
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+
+    <h3 style="color:gold;">Be Respectful</h3>
+
+    <p class="small">Treat all users with respect. Harassment, hate speech, or abuse of any kind will not be tolerated.</p><br>
+
+    <h3 style="color:gold;">Be Honest</h3>
+
+    <p class="small">List only what you can deliver. Fraudulent activity will result in permanent account removal.</p><br>
+
+    <h3 style="color:gold;">Protect Privacy</h3>
+
+    <p class="small">Do not share other users' personal information without their consent.</p><br>
+
+    <h3 style="color:gold;">No Spam</h3>
+
+    <p class="small">Do not send unsolicited messages or engage in any activity that disrupts the platform.</p><br>
+
+    <h3 style="color:gold;">Report Violations</h3>
+
+    <p class="small">Report violations to support@karmasmarket.ng.</p>
+
+  </div>
+
+</section>
+
+
+
+<!-- COOKIE POLICY -->
+
+<section id="cookiePage" class="page">
+
+  <h2 class="page-title">Cookie Policy</h2>
+
+  <div class="sell-box">
+
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+
+    <h3 style="color:gold;">What Are Cookies</h3>
+
+    <p class="small">Cookies are small text files stored on your device that help us remember your preferences and improve your experience.</p><br>
+
+    <h3 style="color:gold;">How We Use Cookies</h3>
+
+    <p class="small">We use cookies to keep you logged in, remember your settings, and analyse platform usage.</p><br>
+
+    <h3 style="color:gold;">Managing Cookies</h3>
+
+    <p class="small">You can control cookies through your browser settings. Disabling cookies may affect some features.</p><br>
+
+    <h3 style="color:gold;">Third-Party Cookies</h3>
+
+    <p class="small">Firebase and Flutterwave may set their own cookies which we do not control.</p>
+
+  </div>
+
+</section>
+
+
+
+<!-- REFUND POLICY -->
+
+<section id="refundPage" class="page">
+
+  <h2 class="page-title">Refund Policy</h2>
+
+  <div class="sell-box">
+
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+
+    <h3 style="color:gold;">Digital Products</h3>
+
+    <p class="small">All sales are final once a product has been downloaded or accessed. Refunds are only issued where the product is proven to be significantly different from its description.</p><br>
+
+    <h3 style="color:gold;">Services / Freelancing</h3>
+
+    <p class="small">Funds are held in escrow until the buyer confirms delivery. If a seller fails to deliver, the buyer may raise a dispute and receive a full refund.</p><br>
+
+    <h3 style="color:gold;">How to Request a Refund</h3>
+
+    <p class="small">Contact support@karmasmarket.ng within 7 days of purchase with your order details.</p><br>
+
+    <h3 style="color:gold;">Approved Refunds</h3>
+
+    <p class="small">Approved refunds are returned to your Karmas Wallet within 5-7 business days.</p>
+
+  </div>
+
+</section>
+
+
+
+<!-- SELLER POLICY -->
+
+<section id="sellerPolicyPage" class="page">
+
+  <h2 class="page-title">Seller Policy</h2>
+
+  <div class="sell-box">
+
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+
+    <h3 style="color:gold;">Eligibility</h3>
+
+    <p class="small">Anyone with a verified account may sell on the platform. You must be 18 years or older.</p><br>
+
+    <h3 style="color:gold;">Listing Requirements</h3>
+
+    <p class="small">All listings must be accurate, clearly described, and priced in Nigerian Naira (₦).</p><br>
+
+    <h3 style="color:gold;">Prohibited Items</h3>
+
+    <p class="small">You may not sell illegal content, stolen goods, counterfeit products, adult content, or anything that violates Nigerian law.</p><br>
+
+    <h3 style="color:gold;">Commission</h3>
+
+    <p class="small">Karmas Market deducts a commission from each successful sale. The rate depends on your product category.</p><br>
+
+    <h3 style="color:gold;">Payouts</h3>
+
+    <p class="small">Earnings are credited to your Karmas Wallet and are withdrawable to your Nigerian bank account.</p>
+
+  </div>
+
+</section>
+
+
+
+<!-- COPYRIGHT & DMCA -->
+
+<section id="copyrightPage" class="page">
+
+  <h2 class="page-title">Copyright & DMCA Policy</h2>
+
+  <div class="sell-box">
+
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+
+    <h3 style="color:gold;">Intellectual Property</h3>
+
+    <p class="small">All content you upload must be your original work or properly licensed. You retain ownership but grant Karmas Market a licence to display it on the platform.</p><br>
+
+    <h3 style="color:gold;">DMCA Takedown Requests</h3>
+
+    <p class="small">If you believe your copyrighted work has been used without permission, send a written notice to support@karmasmarket.ng with your contact details and the URL of the infringing content.</p><br>
+
+    <h3 style="color:gold;">Our Response</h3>
+
+    <p class="small">We will review all valid DMCA notices and remove infringing content within 5 business days.</p>
+
+  </div>
+
+</section>
+<!-- AI USAGE POLICY -->
+<section id="aiPolicyPage" class="page">
+  <h2 class="page-title">AI Usage Policy</h2>
+  <div class="sell-box">
+    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
+    <h3 style="color:gold;">AI Tools on Karmas Market</h3>
+    <p class="small">Karmas Market provides AI-powered tools including the AI Ad Writer and Karma Ad Maker. These tools are creative assistants, not replacements for professional advice.</p><br>
+    <h3 style="color:gold;">Acceptable Use</h3>
+    <p class="small">AI tools may be used to generate marketing content, product descriptions, flyers, and business materials for legitimate purposes.</p><br>
+    <h3 style="color:gold;">Prohibited Use</h3>
+    <p class="small">You may not use our AI tools to generate misleading content, spam, hate speech, or content that infringes on others' rights.</p><br>
+    <h3 style="color:gold;">Responsibility</h3>
+    <p class="small">You are responsible for all content generated using our AI tools.</p>
+  </div>
+</section>
+
+<!-- =====================
+     FOOTER
+===================== -->
+<footer class="karmas-footer">
+
+  <!-- Logo -->
+  <div style="text-align:center; margin-bottom:16px;">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 580" width="55" height="64">
+      <defs>
+        <linearGradient id="fGold" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stop-color="#FFF9C4"/>
+          <stop offset="50%" stop-color="#FFD700"/>
+          <stop offset="100%" stop-color="#B8860B"/>
+        </linearGradient>
+      </defs>
+      <rect width="500" height="580" fill="#0d2040"/>
+      <rect x="18" y="18" width="464" height="544" fill="none" stroke="url(#fGold)" stroke-width="3" rx="4"/>
+      <path d="M130,205 L370,205 L370,235 Q370,242 362,242 L138,242 Q130,242 130,235 Z" fill="url(#fGold)"/>
+      <path d="M148,205 L165,130 L185,205 Z" fill="url(#fGold)"/>
+      <path d="M215,205 L250,68 L285,205 Z" fill="url(#fGold)"/>
+      <path d="M315,205 L335,130 L352,205 Z" fill="url(#fGold)"/>
+      <path d="M130,205 Q139,185 148,205" fill="url(#fGold)"/>
+      <path d="M185,205 Q200,185 215,205" fill="url(#fGold)"/>
+      <path d="M285,205 Q300,185 315,205" fill="url(#fGold)"/>
+      <path d="M352,205 Q361,185 370,205" fill="url(#fGold)"/>
+      <rect x="112" y="237" width="68" height="240" rx="6" fill="url(#fGold)"/>
+      <path d="M184,237 L388,237 L388,295 L184,315 Z" fill="url(#fGold)"/>
+      <path d="M184,373 L388,443 L388,477 L184,477 Z" fill="url(#fGold)"/>
+      <polygon points="184,315 305,342 184,373" fill="#0d2040"/>
+      <text x="250" y="558" font-family="Georgia,serif" font-size="38" font-weight="bold"
+            fill="url(#fGold)" text-anchor="middle" letter-spacing="14">KARMAS</text>
+      <text x="250" y="578" font-family="Arial,sans-serif" font-size="11.5"
+            fill="#94a3b8" text-anchor="middle" letter-spacing="7">MARKETPLACE</text>
+    </svg>
+    <p style="color:#FFD700; font-size:14px; font-weight:bold; margin-top:10px; letter-spacing:2px;">KARMAS MARKET</p>
+    <p style="color:#666; font-size:11px; margin-top:4px;">Buy • Sell • Freelance • Apps</p>
+  </div>
+
+  <!-- Policy links -->
+  <div class="footer-links">
+    <a onclick="showPage('aboutPage')">About Us</a>
+    <a onclick="showPage('contactPage')">Contact Us</a>
+    <a onclick="showPage('privacyPage')">Privacy Policy</a>
+    <a onclick="showPage('termsPage')">Terms of Service</a>
+    <a onclick="showPage('communityPage')">Community Guidelines</a>
+    <a onclick="showPage('cookiePage')">Cookie Policy</a>
+    <a onclick="showPage('refundPage')">Refund Policy</a>
+    <a onclick="showPage('sellerPolicyPage')">Seller Policy</a>
+    <a onclick="showPage('copyrightPage')">Copyright & DMCA</a>
+    <a onclick="showPage('aiPolicyPage')">AI Usage Policy</a>
+  </div>
+
+  <!-- Copyright -->
+  <p style="text-align:center; color:#444; font-size:11px; margin-top:10px;">
+    © 2026 Karmas Market. All rights reserved. Made in Nigeria 🇳🇬
+  </p>
+
+</footer>
+
+<!-- BOTTOM NAVIGATION -->
+<div class="bottom-nav">
+  <button class="nav-btn active" onclick="showPage('products',this)">Products</button>
+  <button class="nav-btn" onclick="showPage('services',this)">Services</button>
+  <button class="nav-btn" onclick="showPage('tools',this)">Tools</button>
+  <button class="nav-btn" onclick="showPage('appMarketplace',this)">Apps</button>
+  <button class="nav-btn" onclick="showPage('profile',this)">Profile</button>
+</div>
+
+<!-- ONBOARDING SCREEN -->
+<div id="onboarding" style="position:fixed; top:0; left:0; width:100%; height:100vh; background:#060e1e; z-index:999999; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:30px; text-align:center;">
+
+  <!-- Logo on onboarding -->
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 580" width="140" height="162" style="margin-bottom:20px;">
+    <defs>
+      <linearGradient id="oGold" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#FFF9C4"/>
+        <stop offset="50%" stop-color="#FFD700"/>
+        <stop offset="100%" stop-color="#B8860B"/>
+      </linearGradient>
+    </defs>
+    <rect width="500" height="580" fill="#0d2040"/>
+    <rect x="18" y="18" width="464" height="544" fill="none" stroke="url(#oGold)" stroke-width="3" rx="4"/>
+    <path d="M130,205 L370,205 L370,235 Q370,242 362,242 L138,242 Q130,242 130,235 Z" fill="url(#oGold)"/>
+    <path d="M148,205 L165,130 L185,205 Z" fill="url(#oGold)"/>
+    <path d="M215,205 L250,68 L285,205 Z" fill="url(#oGold)"/>
+    <path d="M315,205 L335,130 L352,205 Z" fill="url(#oGold)"/>
+    <path d="M130,205 Q139,185 148,205" fill="url(#oGold)"/>
+    <path d="M185,205 Q200,185 215,205" fill="url(#oGold)"/>
+    <path d="M285,205 Q300,185 315,205" fill="url(#oGold)"/>
+    <path d="M352,205 Q361,185 370,205" fill="url(#oGold)"/>
+    <rect x="112" y="237" width="68" height="240" rx="6" fill="url(#oGold)"/>
+    <path d="M184,237 L388,237 L388,295 L184,315 Z" fill="url(#oGold)"/>
+    <path d="M184,373 L388,443 L388,477 L184,477 Z" fill="url(#oGold)"/>
+    <polygon points="184,315 305,342 184,373" fill="#0d2040"/>
+    <text x="250" y="558" font-family="Georgia,serif" font-size="38" font-weight="bold"
+          fill="url(#oGold)" text-anchor="middle" letter-spacing="14">KARMAS</text>
+    <text x="250" y="578" font-family="Arial,sans-serif" font-size="11.5"
+          fill="#94a3b8" text-anchor="middle" letter-spacing="7">MARKETPLACE</text>
+  </svg>
+
+  <h1 style="color:gold; font-size:32px; margin-bottom:16px;">Karmas Market</h1>
+  <p style="color:#ccc; max-width:450px; line-height:1.7; margin-bottom:30px;">
+    Buy products, hire freelancers, discover applications, promote your business and earn money online.
+  </p>
+  <button onclick="closeOnboarding()" style="max-width:250px;">Enter Marketplace</button>
+
+</div>
+
+<!-- SCRIPTS -->
+<script>
+function closeOnboarding(){
+  document.getElementById("onboarding").style.display = "none";
+}
+
+function showPage(id, btn){
+  document.querySelectorAll(".page").forEach(page => page.classList.remove("active"));
+  const target = document.getElementById(id);
+  if(target){ target.classList.add("active"); }
+  document.querySelectorAll(".nav-btn").forEach(button => button.classList.remove("active"));
+  if(btn){ btn.classList.add("active"); }
+  window.scrollTo({ top:0, behavior:"smooth" });
+}
+
+window.addEventListener("load", () => {
+  setTimeout(() => {
+    const loader = document.getElementById("loader");
+    if(loader){
+      loader.style.opacity = "0";
+      loader.style.transition = "opacity 0.8s ease";
+      setTimeout(() => { loader.style.display = "none"; }, 800);
+    }
+  }, 3000);
+});
+</script>
+
+<script>
+const firebaseConfig = {
+  apiKey:"AIzaSyADxrvh97PxTqjkeXKoHP0_XK8HRa8AmpA",
+  authDomain:"realistic-market-show.firebaseapp.com",
+  projectId:"realistic-market-show",
+  storageBucket:"realistic-market-show.appspot.com",
+  messagingSenderId:"390618933993",
+  appId:"1:390618933993:web:8dc95add0ab530bd171e78"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const storage = firebase.storage();
+</script>
+
+<script src="app.js"></script>
+
+</body>
+</html>

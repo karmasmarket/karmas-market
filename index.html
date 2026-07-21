@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>Karmas Market</title>
+  <link rel="stylesheet" href="style.css">
+
+  <!-- ═══════════════════════════════
+       PWA — MANIFEST & ICONS
+  ═══════════════════════════════ -->
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#FFD700">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Karmas Market">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png">
+
+  <!-- ═══════════════════════════════
+       PWA — SERVICE WORKER
+  ═══════════════════════════════ -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(() => console.log('Karmas Market PWA ready ✅'))
+          .catch(err => console.log('SW error:', err));
+      });
+    }
+  </script>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; font-family:Arial,sans-serif; }
+
+    body {
+      background:#060e1e;
+      color:white;
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      padding:20px;
+    }
+
+    .login-wrap {
+      width:100%;
+      max-width:480px;
+    }
+
+    .brand {
+      text-align:center;
+      margin-bottom:28px;
+    }
+
+    .brand h1 {
+      color:gold;
+      font-size:30px;
+      font-weight:900;
+      letter-spacing:1px;
+      text-transform:uppercase;
+      margin-top:12px;
+    }
+
+    .brand p {
+      color:#888;
+      font-size:13px;
+      margin-top:6px;
+    }
+
+    .card {
+      background:#0d1b2a;
+      border:1px solid rgba(255,215,0,0.15);
+      border-radius:20px;
+      padding:24px;
+      margin-bottom:16px;
+    }
+
+    .card h2 {
+      color:gold;
+      font-size:18px;
+      margin-bottom:18px;
+    }
+      input, textarea, select {
+      width:100%;
+      padding:14px;
+      margin-bottom:12px;
+      background:rgba(255,255,255,0.05);
+      border:1px solid rgba(255,215,0,0.1);
+      border-radius:12px;
+      color:white;
+      font-size:14px;
+      outline:none;
+    }
+
+    input::placeholder, textarea::placeholder { color:#666; }
+    textarea { height:90px; resize:vertical; }
+
+    .btn-gold {
+      width:100%;
+      padding:14px;
+      background:gold;
+      color:#0d1b2a;
+      font-weight:bold;
+      font-size:15px;
+      border:none;
+      border-radius:12px;
+      cursor:pointer;
+      margin-top:4px;
+      margin-bottom:8px;
+      transition:0.2s;
+    }
+    .btn-gold:hover { background:#ffe44d; }
+
+    .btn-alt {
+      width:100%;
+      padding:14px;
+      background:transparent;
+      color:gold;
+      font-weight:bold;
+      font-size:15px;
+      border:1px solid rgba(255,215,0,0.4);
+      border-radius:12px;
+      cursor:pointer;
+      margin-top:4px;
+      transition:0.2s;
+    }
+    .btn-alt:hover { background:rgba(255,215,0,0.08); }
+
+    .role-grid {
+      display:grid;
+      grid-template-columns:1fr 1fr;
+      gap:12px;
+      margin-top:4px;
+    }
+
+    .role-card {
+      background:#111c2e;
+      border:2px solid rgba(255,215,0,0.15);
+      border-radius:14px;
+      padding:20px 14px;
+      text-align:center;
+      cursor:pointer;
+      transition:0.2s;
+    }
+    .role-card:hover { border-color:gold; background:#162035; }
+    .role-card .icon { font-size:32px; margin-bottom:8px; }
+    .role-card h3 { color:gold; font-size:15px; margin-bottom:4px; }
+    .role-card p { color:#888; font-size:12px; line-height:1.4; }
+
+    #status {
+      color:#ff6b6b;
+      font-size:13px;
+      text-align:center;
+      margin-top:8px;
+      min-height:18px;
+    }
+
+    .hidden { display:none; }
+
+    .divider {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin:16px 0;
+      color:#444;
+      font-size:12px;
+    }
+    .divider::before, .divider::after {
+      content:"";
+      flex:1;
+      height:1px;
+      background:rgba(255,215,0,0.1);
+    }
+
+    .checkbox-row {
+      display:flex;
+      align-items:center;
+      gap:10px;
+      margin-bottom:12px;
+      font-size:13px;
+      color:#aaa;
+    }
+    .checkbox-row input[type="checkbox"] {
+      width:18px; height:18px; margin:0; accent-color:gold;
+    }
+
+    /* PWA install banner */
+    #pwa-banner {
+      display:none;
+      position:fixed;
+      bottom:20px;
+      left:50%;
+      transform:translateX(-50%);
+      background:#0d1b2a;
+      border:1px solid rgba(255,215,0,0.4);
+      border-radius:16px;
+      padding:14px 20px;
+      z-index:9999;
+      width:90%;
+      max-width:400px;
+      box-shadow:0 8px 30px rgba(0,0,0,0.5);
+    }
+    #pwa-banner p {
+      color:#ccc;
+      font-size:13px;
+      margin-bottom:10px;
+    }
+    #pwa-banner strong { color:gold; }
+    .pwa-btns { display:flex; gap:10px; }
+    .pwa-btns button {
+      flex:1; padding:10px;
+      border-radius:10px;
+      font-weight:bold;
+      font-size:13px;
+      cursor:pointer;
+      border:none;
+    }
+    .pwa-install { background:gold; color:#0d1b2a; }
+    .pwa-dismiss { background:rgba(255,255,255,0.06); color:#aaa; }
+  </style>
+</head>
+
+<body>
+
+<div class="login-wrap">
+
+  <!-- BRAND with logo -->
+  <div class="brand">
+
+    <!-- Inline SVG Logo -->
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 580"
+         width="100" height="116"
+         style="filter:drop-shadow(0 4px 20px rgba(255,215,0,0.35));">
+      <defs>
+        <linearGradient id="lg" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%"   stop-color="#FFF9C4"/>
+          <stop offset="30%"  stop-color="#FFD700"/>
+          <stop offset="70%"  stop-color="#F0A500"/>
+          <stop offset="100%" stop-color="#B8860B"/>
+        </linearGradient>
+        <linearGradient id="bg2" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%"   stop-color="#0d2040"/>
+          <stop offset="100%" stop-color="#060e1e"/>
+        </linearGradient>
+      </defs>
+      <rect width="500" height="580" fill="url(#bg2)" rx="0"/>
+      <rect x="18" y="18" width="464" height="544" fill="none" stroke="url(#lg)" stroke-width="3" rx="4"/>
+      <!-- Crown -->
+      <path d="M130,205 L370,205 L370,235 Q370,242 362,242 L138,242 Q130,242 130,235 Z" fill="url(#lg)"/>
+      <path d="M148,205 L165,130 L185,205 Z" fill="url(#lg)"/>
+      <path d="M215,205 L250,68 L285,205 Z" fill="url(#lg)"/>
+      <path d="M315,205 L335,130 L352,205 Z" fill="url(#lg)"/>
+      <path d="M130,205 Q139,185 148,205" fill="url(#lg)"/>
+      <path d="M185,205 Q200,185 215,205" fill="url(#lg)"/>
+      <path d="M285,205 Q300,185 315,205" fill="url(#lg)"/>
+      <path d="M352,205 Q361,185 370,205" fill="url(#lg)"/>
+      <!-- Jewels -->
+      <circle cx="165" cy="127" r="14" fill="#FF4444" stroke="#FFD700" stroke-width="3"/>
+      <circle cx="250" cy="65"  r="18" fill="#FF4444" stroke="#FFD700" stroke-width="3"/>
+      <circle cx="335" cy="127" r="14" fill="#4488FF" stroke="#FFD700" stroke-width="3"/>
+      <!-- K -->
+      <rect x="112" y="237" width="68" height="240" rx="6" fill="url(#lg)"/>
+      <path d="M184,237 L388,237 L388,295 L184,315 Z" fill="url(#lg)"/>
+      <path d="M184,373 L388,443 L388,477 L184,477 Z" fill="url(#lg)"/>
+      <polygon points="184,315 305,342 184,373" fill="#060e1e"/>
+      <!-- Text -->
+      <line x1="50" y1="508" x2="212" y2="508" stroke="url(#lg)" stroke-width="1.2" opacity="0.7"/>
+      <line x1="288" y1="508" x2="450" y2="508" stroke="url(#lg)" stroke-width="1.2" opacity="0.7"/>
+      <polygon points="250,501 258,508 250,515 242,508" fill="url(#lg)"/>
+      <text x="250" y="545" font-family="Georgia,serif" font-size="38" font-weight="bold"
+            fill="url(#lg)" text-anchor="middle" letter-spacing="14">KARMAS</text>
+      <text x="250" y="570" font-family="Arial,sans-serif" font-size="12"
+            fill="#94a3b8" text-anchor="middle" letter-spacing="7">MARKETPLACE</text>
+    </svg>
+
+    <h1>Karmas Market</h1>
+    <p>Premium Deals. Trusted Sellers.</p>
+  </div>
+
+  <!-- STEP 1: LOGIN / SIGNUP -->
+  <div id="stepAuth" class="card">
+    <h2>👋 Welcome Back</h2>
+    <input type="email" id="email" placeholder="Email Address">
+    <input type="password" id="password" placeholder="Password">
+    <button class="btn-gold" onclick="login()">Login</button>
+    <div class="divider">or</div>
+    <button class="btn-alt" onclick="signUp()">Create New Account</button>
+    <p id="status"></p>
+  </div>
+
+  <!-- STEP 2: CHOOSE ROLE -->
+  <div id="stepRole" class="card hidden">
+    <h2>🎯 Choose Your Role</h2>
+    <p style="color:#888; font-size:13px; margin-bottom:16px;">
+      How would you like to use Karmas Market?
+    </p>
+    <div class="role-grid">
+      <div class="role-card" onclick="selectRole('client')">
+        <div class="icon">🛒</div>
+        <h3>I Want To Hire</h3>
+        <p>Buy products and hire freelancers for your business</p>
+      </div>
+      <div class="role-card" onclick="selectRole('freelancer')">
+        <div class="icon">💼</div>
+        <h3>I Am A Freelancer</h3>
+        <p>Sell your skills and services to clients</p>
+      </div>
+    </div>
+  </div>
+<!-- STEP 3A: FREELANCER REGISTRATION -->
+  <div id="freelancerForm" class="card hidden">
+    <h2>💼 Freelancer Profile</h2>
+    <input id="freelancerName" placeholder="Full Name">
+    <select id="freelancerSkill">
+      <option value="">Select Your Main Skill</option>
+      <option>Logo Design</option>
+      <option>Graphic Design</option>
+      <option>Web Development</option>
+      <option>Mobile App Development</option>
+      <option>Copywriting</option>
+      <option>Digital Marketing</option>
+      <option>Video Editing</option>
+      <option>Photography</option>
+      <option>Social Media Management</option>
+      <option>Data Entry</option>
+      <option>Virtual Assistant</option>
+      <option>Other</option>
+    </select>
+    <input id="freelancerOtherSkill" placeholder="Other skill (if selected above)" class="hidden">
+    <select id="employmentType">
+      <option value="">Employment Status</option>
+      <option value="self-employed">Self Employed</option>
+      <option value="part-time">Part Time Freelancer</option>
+      <option value="full-time">Full Time Freelancer</option>
+      <option value="student">Student</option>
+    </select>
+    <input id="freelancerPrice" type="number" placeholder="Starting Price (₦)">
+    <input id="freelancerPhone" placeholder="WhatsApp / Phone Number">
+    <input id="freelancerLocation" placeholder="City / State (e.g. Lagos, Nigeria)">
+    <textarea id="freelancerBio" placeholder="Describe yourself and your experience..."></textarea>
+    <input id="freelancerImage" placeholder="Profile Photo URL (optional)">
+    <div class="checkbox-row">
+      <input type="checkbox" id="freelancerAgree">
+      <label for="freelancerAgree">I agree to the Karmas Market Seller Policy & Terms</label>
+    </div>
+    <button class="btn-gold" onclick="createFreelancerProfile()">Create Freelancer Profile</button>
+    <button class="btn-alt" onclick="goBackToRole()">← Change Role</button>
+    <p id="freelancerStatus" style="color:#ff6b6b; font-size:13px; margin-top:8px; text-align:center;"></p>
+  </div>
+
+  <!-- STEP 3B: CLIENT REGISTRATION -->
+  <div id="clientForm" class="card hidden">
+    <h2>🛒 Client Profile</h2>
+    <input id="clientName" placeholder="Full Name">
+    <input id="clientBusiness" placeholder="Business Name (optional)">
+    <select id="clientType">
+      <option value="">What are you looking for?</option>
+      <option value="hire-freelancer">Hire a Freelancer</option>
+      <option value="buy-products">Buy Digital Products</option>
+      <option value="both">Both</option>
+    </select>
+    <input id="clientPhone" placeholder="WhatsApp / Phone Number">
+    <input id="clientLocation" placeholder="City / State (e.g. Abuja, Nigeria)">
+    <div class="checkbox-row">
+      <input type="checkbox" id="clientAgree">
+      <label for="clientAgree">I agree to the Karmas Market Terms of Service</label>
+    </div>
+    <button class="btn-gold" onclick="createClientProfile()">Create Client Profile</button>
+    <button class="btn-alt" onclick="goBackToRole()">← Change Role</button>
+    <p id="clientStatus" style="color:#ff6b6b; font-size:13px; margin-top:8px; text-align:center;"></p>
+  </div>
+
+</div>
+<!-- PWA INSTALL BANNER -->
+<div id="pwa-banner">
+  <p>📲 Install <strong>Karmas Market</strong> on your phone for a faster experience!</p>
+  <div class="pwa-btns">
+    <button class="pwa-install" onclick="installPWA()">Install App</button>
+    <button class="pwa-dismiss" onclick="dismissPWA()">Not Now</button>
+  </div>
+</div>
+
+<script>
+  /* ─────────────────────
+     FIREBASE
+  ───────────────────── */
+  const firebaseConfig = {
+    apiKey: "AIzaSyADxrvh97PxTqjkeXKoHP0_XK8HRa8AmpA",
+    authDomain: "realistic-market-show.firebaseapp.com",
+    projectId: "realistic-market-show",
+    storageBucket: "realistic-market-show.appspot.com",
+    messagingSenderId: "390618933993",
+    appId: "1:390618933993:web:8dc95add0ab530bd171e78"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+  let currentUser = null;
+
+  /* ─────────────────────
+     PWA INSTALL PROMPT
+  ───────────────────── */
+  let deferredPrompt = null;
+
+  window.addEventListener("beforeinstallprompt", (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // Show banner after 3 seconds
+    setTimeout(() => {
+      if (!localStorage.getItem("pwa-dismissed")) {
+        document.getElementById("pwa-banner").style.display = "block";
+      }
+    }, 3000);
+  });
+
+  function installPWA() {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      deferredPrompt.userChoice.then(() => {
+        deferredPrompt = null;
+        document.getElementById("pwa-banner").style.display = "none";
+      });
+    }
+  }
+
+  function dismissPWA() {
+    document.getElementById("pwa-banner").style.display = "none";
+    localStorage.setItem("pwa-dismissed", "true");
+  }
+
+  /* ─────────────────────
+     AUTH STATE
+  ───────────────────── */
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      currentUser = user;
+      db.collection("users").doc(user.uid).get().then(doc => {
+        if (doc.exists && doc.data().role) {
+          window.location.href = "home.html";
+        } else {
+          document.getElementById("stepAuth").classList.add("hidden");
+          document.getElementById("stepRole").classList.remove("hidden");
+        }
+      });
+    }
+  });
+
+  /* ─────────────────────
+     SIGN UP
+  ───────────────────── */
+  function signUp() {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    const status = document.getElementById("status");
+    if (!email || !password) { status.innerText = "Please enter your email and password."; return; }
+    if (password.length < 6) { status.innerText = "Password must be at least 6 characters."; return; }
+    status.innerText = "Creating account...";
+    auth.createUserWithEmailAndPassword(email, password)
+      .then(result => {
+        currentUser = result.user;
+        status.innerText = "";
+        document.getElementById("stepAuth").classList.add("hidden");
+        document.getElementById("stepRole").classList.remove("hidden");
+      })
+      .catch(err => { status.innerText = err.message; });
+  }
+
+  /* ─────────────────────
+     LOGIN
+  ───────────────────── */
+  function login() {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    const status = document.getElementById("status");
+    if (!email || !password) { status.innerText = "Please enter your email and password."; return; }
+    status.innerText = "Logging in...";
+    auth.signInWithEmailAndPassword(email, password)
+      .then(() => { window.location.href = "home.html"; })
+      .catch(err => { status.innerText = err.message; });
+  }
+
+  /* ─────────────────────
+     ROLE SELECTION
+  ───────────────────── */
+  function selectRole(role) {
+    document.getElementById("stepRole").classList.add("hidden");
+    if (role === "freelancer") {
+      document.getElementById("freelancerForm").classList.remove("hidden");
+    } else {
+      document.getElementById("clientForm").classList.remove("hidden");
+    }
+  }
+
+  function goBackToRole() {
+    document.getElementById("freelancerForm").classList.add("hidden");
+    document.getElementById("clientForm").classList.add("hidden");
+    document.getElementById("stepRole").classList.remove("hidden");
+  }
+ /* ─────────────────────
+     FREELANCER SKILL TOGGLE
+  ───────────────────── */
+  document.getElementById("freelancerSkill").addEventListener("change", function() {
+    const other = document.getElementById("freelancerOtherSkill");
+    if (this.value === "Other") { other.classList.remove("hidden"); }
+    else { other.classList.add("hidden"); }
+  });
+
+  /* ─────────────────────
+     CREATE FREELANCER PROFILE
+  ───────────────────── */
+  function createFreelancerProfile() {
+    const status = document.getElementById("freelancerStatus");
+    const name = document.getElementById("freelancerName").value.trim();
+    const skill = document.getElementById("freelancerSkill").value;
+    const otherSkill = document.getElementById("freelancerOtherSkill").value.trim();
+    const employment = document.getElementById("employmentType").value;
+    const price = document.getElementById("freelancerPrice").value;
+    const phone = document.getElementById("freelancerPhone").value.trim();
+    const location = document.getElementById("freelancerLocation").value.trim();
+    const bio = document.getElementById("freelancerBio").value.trim();
+    const image = document.getElementById("freelancerImage").value.trim();
+    const agreed = document.getElementById("freelancerAgree").checked;
+
+    if (!name) { status.innerText = "⚠️ Please enter your full name."; return; }
+    if (!skill) { status.innerText = "⚠️ Please select your main skill."; return; }
+    if (!price) { status.innerText = "⚠️ Please enter your starting price."; return; }
+    if (!bio) { status.innerText = "⚠️ Please write a short bio."; return; }
+    if (!agreed) { status.innerText = "⚠️ Please agree to the Seller Policy."; return; }
+    if (!currentUser) { status.innerText = "⚠️ Not logged in. Please refresh."; return; }
+
+    status.innerText = "Creating profile...";
+
+    const profileData = {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      role: "freelancer",
+      name, skill: skill === "Other" ? otherSkill : skill,
+      employmentType: employment,
+      price: parseFloat(price),
+      phone, location, bio,
+      image: image || "",
+      rating: 0, reviews: 0, completedJobs: 0, verified: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    db.collection("users").doc(currentUser.uid).set(profileData)
+      .then(() => db.collection("freelancers").doc(currentUser.uid).set(profileData))
+      .then(() => {
+        status.style.color = "gold";
+        status.innerText = "✅ Profile created! Redirecting...";
+        setTimeout(() => { window.location.href = "home.html"; }, 1500);
+      })
+      .catch(err => { status.innerText = "Error: " + err.message; });
+  }
+
+  /* ─────────────────────
+     CREATE CLIENT PROFILE
+  ───────────────────── */
+  function createClientProfile() {
+    const status = document.getElementById("clientStatus");
+    const name = document.getElementById("clientName").value.trim();
+    const business = document.getElementById("clientBusiness").value.trim();
+    const clientType = document.getElementById("clientType").value;
+    const phone = document.getElementById("clientPhone").value.trim();
+    const location = document.getElementById("clientLocation").value.trim();
+    const agreed = document.getElementById("clientAgree").checked;
+
+    if (!name) { status.innerText = "⚠️ Please enter your full name."; return; }
+    if (!agreed) { status.innerText = "⚠️ Please agree to the Terms of Service."; return; }
+    if (!currentUser) { status.innerText = "⚠️ Not logged in. Please refresh."; return; }
+
+    status.innerText = "Creating profile...";
+
+    const profileData = {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      role: "client",
+      name, business: business || "",
+      clientType, phone, location,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    db.collection("users").doc(currentUser.uid).set(profileData)
+      .then(() => {
+        status.style.color = "gold";
+        status.innerText = "✅ Profile created! Redirecting...";
+        setTimeout(() => { window.location.href = "home.html"; }, 1500);
+      })
+      .catch(err => { status.innerText = "Error: " + err.message; });
+  }
+</script>
+
+</body>
+</html>

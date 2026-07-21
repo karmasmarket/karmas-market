@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+  <meta charset="UTF-8">
+
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+
+  <title>Karmas Market</title>
+
+  <link rel="stylesheet" href="style.css">
+
+
+
+  <!-- Firebase -->
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+
+
+
+  <style>
+
+    * { margin:0; padding:0; box-sizing:border-box; font-family:Arial,sans-serif; }
+
+
+
+    body {
+
+      background:#060e1e;
+
+      color:white;
+
+      min-height:100vh;
+
+      display:flex;
+
+      align-items:center;
+
+      justify-content:center;
+
+      padding:20px;
+
+    }
+
+
+
+    .login-wrap {
+
+      width:100%;
+
+      max-width:480px;
+
+    }
+
+
+
+    .brand {
+
+      text-align:center;
+
+      margin-bottom:28px;
+
+    }
+
+
+
+    .brand h1 {
+
+      color:gold;
+
+      font-size:30px;
+
+      font-weight:900;
+
+      letter-spacing:1px;
+
+      text-transform:uppercase;
+
+    }
+
+
+
+    .brand p {
+
+      color:#888;
+
+      font-size:13px;
+
+      margin-top:6px;
+
+    }
+
+
+
+    .card {
+
+      background:#0d1b2a;
+
+      border:1px solid rgba(255,215,0,0.15);
+
+      border-radius:20px;
+
+      padding:24px;
+
+      margin-bottom:16px;
+
+    }
+
+
+
+    .card h2 {
+
+      color:gold;
+
+      font-size:18px;
+
+      margin-bottom:18px;
+
+    }
+
+
+
+    input, textarea, select {
+
+      width:100%;
+
+      padding:14px;
+
+      margin-bottom:12px;
+
+      background:rgba(255,255,255,0.05);
+
+      border:1px solid rgba(255,215,0,0.1);
+
+      border-radius:12px;
+
+      color:white;
+
+      font-size:14px;
+
+      outline:none;
+
+    }
+
+
+
+    input::placeholder, textarea::placeholder { color:#666; }
+
+
+
+    textarea { height:90px; resize:vertical; }
+
+
+
+    .btn-gold {
+
+      width:100%;
+
+      padding:14px;
+
+      background:gold;
+
+      color:#0d1b2a;
+
+      font-weight:bold;
+
+      font-size:15px;
+
+      border:none;
+
+      border-radius:12px;
+
+      cursor:pointer;
+
+      margin-top:4px;
+
+      margin-bottom:8px;
+
+      transition:0.2s;
+
+    }
+
+
+
+    .btn-gold:hover { background:#ffe44d; }
+
+
+
+    .btn-alt {
+
+      width:100%;
+
+      padding:14px;
+
+      background:transparent;
+
+      color:gold;
+
+      font-weight:bold;
+
+      font-size:15px;
+
+      border:1px solid rgba(255,215,0,0.4);
+
+      border-radius:12px;
+
+      cursor:pointer;
+
+      margin-top:4px;
+
+      transition:0.2s;
+
+    }
+
+
+
+    .btn-alt:hover { background:rgba(255,215,0,0.08); }
+
+
+
+    .role-grid {
+
+      display:grid;
+
+      grid-template-columns:1fr 1fr;
+
+      gap:12px;
+
+      margin-top:4px;
+
+    }
+
+
+
+    .role-card {
+
+      background:#111c2e;
+
+      border:2px solid rgba(255,215,0,0.15);
+
+      border-radius:14px;
+
+      padding:20px 14px;
+
+      text-align:center;
+
+      cursor:pointer;
+
+      transition:0.2s;
+
+    }
+
+
+
+    .role-card:hover {
+
+      border-color:gold;
+
+      background:#162035;
+
+    }
+
+
+
+    .role-card .icon { font-size:32px; margin-bottom:8px; }
+
+    .role-card h3 { color:gold; font-size:15px; margin-bottom:4px; }
+
+    .role-card p { color:#888; font-size:12px; line-height:1.4; }
+
+
+
+    #status {
+
+      color:#ff6b6b;
+
+      font-size:13px;
+
+      text-align:center;
+
+      margin-top:8px;
+
+      min-height:18px;
+
+    }
+
+
+
+    .hidden { display:none; }
+
+
+
+    .divider {
+
+      display:flex;
+
+      align-items:center;
+
+      gap:10px;
+
+      margin:16px 0;
+
+      color:#444;
+
+      font-size:12px;
+
+    }
+
+
+
+    .divider::before, .divider::after {
+
+      content:"";
+
+      flex:1;
+
+      height:1px;
+
+      background:rgba(255,215,0,0.1);
+
+    }
+
+
+
+    .checkbox-row {
+
+      display:flex;
+
+      align-items:center;
+
+      gap:10px;
+
+      margin-bottom:12px;
+
+      font-size:13px;
+
+      color:#aaa;
+
+    }
+
+
+
+    .checkbox-row input[type="checkbox"] {
+
+      width:18px;
+
+      height:18px;
+
+      margin:0;
+
+      accent-color:gold;
+
+    }
+
+
+
+    .step-indicator {
+
+      display:flex;
+
+      justify-content:center;
+
+      gap:8px;
+
+      margin-bottom:20px;
+
+    }
+
+
+
+    .step-dot {
+
+      width:8px;
+
+      height:8px;
+
+      border-radius:50%;
+
+      background:rgba(255,215,0,0.2);
+
+      transition:0.3s;
+
+    }
+
+
+
+    .step-dot.active { background:gold; }
+
+  </style>
+
+</head>
+
+
+
+<body>
+  <div class="login-wrap">
+
+  <!-- BRAND -->
+  <div class="brand">
+    <h1>Karmas Market</h1>
+    <p>Premium Deals. Trusted Sellers.</p>
+  </div>
+
+  <!-- STEP 1: LOGIN / SIGNUP -->
+  <div id="stepAuth" class="card">
+    <h2>👋 Welcome Back</h2>
+    <input type="email" id="email" placeholder="Email Address">
+    <input type="password" id="password" placeholder="Password">
+    <button class="btn-gold" onclick="login()">Login</button>
+    <div class="divider">or</div>
+    <button class="btn-alt" onclick="signUp()">Create New Account</button>
+    <p id="status"></p>
+  </div>
+
+  <!-- STEP 2: CHOOSE ROLE -->
+  <div id="stepRole" class="card hidden">
+    <h2>🎯 Choose Your Role</h2>
+    <p style="color:#888; font-size:13px; margin-bottom:16px;">
+      How would you like to use Karmas Market?
+    </p>
+    <div class="role-grid">
+      <div class="role-card" onclick="selectRole('client')">
+        <div class="icon">🛒</div>
+        <h3>Seller & Buyer</h3>
+        <p>Post products, buy from others, and hire freelancers — all in one account</p>
+      </div>
+      <div class="role-card" onclick="selectRole('freelancer')">
+        <div class="icon">💼</div>
+        <h3>I Am A Freelancer</h3>
+        <p>Sell your skills and services to clients</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 3A: FREELANCER REGISTRATION -->
+  <div id="freelancerForm" class="card hidden">
+    <h2>💼 Freelancer Profile</h2>
+
+    <input id="freelancerName" placeholder="Full Name">
+
+    <select id="freelancerSkill">
+      <option value="">Select Your Main Skill</option>
+      <option>Logo Design</option>
+      <option>Graphic Design</option>
+      <option>Web Development</option>
+      <option>Mobile App Development</option>
+      <option>Copywriting</option>
+      <option>Digital Marketing</option>
+      <option>Video Editing</option>
+      <option>Photography</option>
+      <option>Social Media Management</option>
+      <option>Data Entry</option>
+      <option>Virtual Assistant</option>
+      <option>Other</option>
+    </select>
+
+    <input id="freelancerOtherSkill" placeholder="Other skill (if selected above)" class="hidden">
+
+    <select id="employmentType">
+      <option value="">Employment Status</option>
+      <option value="self-employed">Self Employed</option>
+      <option value="part-time">Part Time Freelancer</option>
+      <option value="full-time">Full Time Freelancer</option>
+      <option value="student">Student</option>
+    </select>
+
+    <input id="freelancerPrice" type="number" placeholder="Starting Price (₦)">
+
+    <input id="freelancerPhone" placeholder="WhatsApp / Phone Number">
+
+    <input id="freelancerLocation" placeholder="City / State (e.g. Lagos, Nigeria)">
+
+    <textarea id="freelancerBio" placeholder="Describe yourself and your experience..."></textarea>
+
+    <input id="freelancerImage" placeholder="Profile Photo URL (optional)">
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="freelancerAgree">
+      <label for="freelancerAgree">I agree to the Karmas Market Seller Policy & Terms</label>
+    </div>
+
+    <button class="btn-gold" onclick="createFreelancerProfile()">
+      Create Freelancer Profile
+    </button>
+    <button class="btn-alt" onclick="goBackToRole()">← Change Role</button>
+
+    <p id="freelancerStatus" style="color:#ff6b6b; font-size:13px; margin-top:8px; text-align:center;"></p>
+  </div>
+
+  <!-- STEP 3B: SELLER & BUYER REGISTRATION (formerly "client") -->
+  <div id="clientForm" class="card hidden">
+    <h2>🛒 Seller & Buyer Profile</h2>
+
+    <input id="clientName" placeholder="Full Name">
+
+    <input id="clientBusiness" placeholder="Business / Shop Name (optional)">
+
+    <select id="clientType">
+      <option value="">What are you looking for?</option>
+      <option value="hire-freelancer">Hire a Freelancer</option>
+      <option value="buy-products">Buy Digital Products</option>
+      <option value="sell-products">Sell Products</option>
+      <option value="both">All of the Above</option>
+    </select>
+
+    <input id="clientPhone" placeholder="WhatsApp / Phone Number">
+
+    <input id="clientLocation" placeholder="City / State (e.g. Abuja, Nigeria)">
+
+    <textarea id="clientBio" placeholder="Tell buyers a little about you or your business..."></textarea>
+
+    <input id="clientImage" placeholder="Profile Photo URL (optional)">
+
+    <div class="checkbox-row">
+      <input type="checkbox" id="clientAgree">
+      <label for="clientAgree">I agree to the Karmas Market Terms of Service</label>
+    </div>
+
+    <button class="btn-gold" onclick="createClientProfile()">
+      Create Profile
+    </button>
+    <button class="btn-alt" onclick="goBackToRole()">← Change Role</button>
+
+    <p id="clientStatus" style="color:#ff6b6b; font-size:13px; margin-top:8px; text-align:center;"></p>
+  </div>
+
+</div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyADxrvh97PxTqjkeXKoHP0_XK8HRa8AmpA",
+    authDomain: "realistic-market-show.firebaseapp.com",
+    projectId: "realistic-market-show",
+    storageBucket: "realistic-market-show.appspot.com",
+    messagingSenderId: "390618933993",
+    appId: "1:390618933993:web:8dc95add0ab530bd171e78"
+  };
+
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+  const db = firebase.firestore();
+
+  let currentUser = null;
+
+  /* ─────────────────────
+     CHECK IF ALREADY LOGGED IN
+  ───────────────────── */
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      currentUser = user;
+      // Check if they already have a profile
+      db.collection("users").doc(user.uid).get().then(doc => {
+        if (doc.exists && doc.data().role) {
+          // Already registered — go straight to app
+          window.location.href = "home.html";
+        } else {
+          // Logged in but no profile yet — show role selection
+          document.getElementById("stepAuth").classList.add("hidden");
+          document.getElementById("stepRole").classList.remove("hidden");
+        }
+      });
+    }
+  });
+
+  /* ─────────────────────
+     SIGN UP
+  ───────────────────── */
+  function signUp() {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    const status = document.getElementById("status");
+
+    if (!email || !password) {
+      status.innerText = "Please enter your email and password.";
+      return;
+    }
+    if (password.length < 6) {
+      status.innerText = "Password must be at least 6 characters.";
+      return;
+    }
+
+    status.innerText = "Creating account...";
+
+    auth.createUserWithEmailAndPassword(email, password)
+      .then(result => {
+        currentUser = result.user;
+        status.innerText = "";
+        document.getElementById("stepAuth").classList.add("hidden");
+        document.getElementById("stepRole").classList.remove("hidden");
+      })
+      .catch(err => {
+        status.innerText = err.message;
+      });
+  }
+
+  /* ─────────────────────
+     LOGIN
+  ───────────────────── */
+  function login() {
+    const email = document.getElementById("email").value.trim();
+    const password = document.getElementById("password").value;
+    const status = document.getElementById("status");
+
+    if (!email || !password) {
+      status.innerText = "Please enter your email and password.";
+      return;
+    }
+
+    status.innerText = "Logging in...";
+
+    auth.signInWithEmailAndPassword(email, password)
+      .then(() => {
+        window.location.href = "home.html";
+      })
+      .catch(err => {
+        status.innerText = err.message;
+      });
+  }
+
+  /* ─────────────────────
+     SELECT ROLE
+  ───────────────────── */
+  function selectRole(role) {
+    document.getElementById("stepRole").classList.add("hidden");
+    if (role === "freelancer") {
+      document.getElementById("freelancerForm").classList.remove("hidden");
+    } else {
+      document.getElementById("clientForm").classList.remove("hidden");
+    }
+  }
+
+  function goBackToRole() {
+    document.getElementById("freelancerForm").classList.add("hidden");
+    document.getElementById("clientForm").classList.add("hidden");
+    document.getElementById("stepRole").classList.remove("hidden");
+  }
+
+  /* ─────────────────────
+     FREELANCER SKILL TOGGLE
+  ───────────────────── */
+  document.getElementById("freelancerSkill").addEventListener("change", function() {
+    const other = document.getElementById("freelancerOtherSkill");
+    if (this.value === "Other") {
+      other.classList.remove("hidden");
+    } else {
+      other.classList.add("hidden");
+    }
+  });
+
+  /* ─────────────────────
+     CREATE FREELANCER PROFILE
+  ───────────────────── */
+  function createFreelancerProfile() {
+    const status = document.getElementById("freelancerStatus");
+
+    const name = document.getElementById("freelancerName").value.trim();
+    const skill = document.getElementById("freelancerSkill").value;
+    const otherSkill = document.getElementById("freelancerOtherSkill").value.trim();
+    const employment = document.getElementById("employmentType").value;
+    const price = document.getElementById("freelancerPrice").value;
+    const phone = document.getElementById("freelancerPhone").value.trim();
+    const location = document.getElementById("freelancerLocation").value.trim();
+    const bio = document.getElementById("freelancerBio").value.trim();
+    const image = document.getElementById("freelancerImage").value.trim();
+    const agreed = document.getElementById("freelancerAgree").checked;
+
+    if (!name) { status.innerText = "⚠️ Please enter your full name."; return; }
+    if (!skill) { status.innerText = "⚠️ Please select your main skill."; return; }
+    if (!price) { status.innerText = "⚠️ Please enter your starting price."; return; }
+    if (!bio) { status.innerText = "⚠️ Please write a short bio."; return; }
+    if (!agreed) { status.innerText = "⚠️ Please agree to the Seller Policy."; return; }
+    if (!currentUser) { status.innerText = "⚠️ Not logged in. Please refresh."; return; }
+
+    status.innerText = "Creating profile...";
+
+    const profileData = {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      role: "freelancer",
+      name: name,
+      skill: skill === "Other" ? otherSkill : skill,
+      employmentType: employment,
+      price: parseFloat(price),
+      phone: phone,
+      location: location,
+      bio: bio,
+      image: image || "",
+      rating: 0,
+      reviews: 0,
+      completedJobs: 0,
+      verified: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    // Save to users collection
+    db.collection("users").doc(currentUser.uid).set(profileData)
+      .then(() => {
+        // Also save to freelancers collection
+        return db.collection("freelancers").doc(currentUser.uid).set(profileData);
+      })
+      .then(() => {
+        status.style.color = "gold";
+        status.innerText = "✅ Profile created! Redirecting...";
+        setTimeout(() => { window.location.href = "home.html"; }, 1500);
+      })
+      .catch(err => {
+        status.innerText = "Error: " + err.message;
+      });
+  }
+
+  /* ─────────────────────
+     CREATE SELLER & BUYER PROFILE
+     (formerly "client" — now a merged identity:
+     this person can buy products, hire freelancers,
+     AND post products for sale, all from one account.
+     Also creates a matching "sellers" doc so they can
+     post products immediately without a separate step.)
+  ───────────────────── */
+  function createClientProfile() {
+    const status = document.getElementById("clientStatus");
+
+    const name = document.getElementById("clientName").value.trim();
+    const business = document.getElementById("clientBusiness").value.trim();
+    const clientType = document.getElementById("clientType").value;
+    const phone = document.getElementById("clientPhone").value.trim();
+    const location = document.getElementById("clientLocation").value.trim();
+    const bio = document.getElementById("clientBio").value.trim();
+    const image = document.getElementById("clientImage").value.trim();
+    const agreed = document.getElementById("clientAgree").checked;
+
+    if (!name) { status.innerText = "⚠️ Please enter your full name."; return; }
+    if (!agreed) { status.innerText = "⚠️ Please agree to the Terms of Service."; return; }
+    if (!currentUser) { status.innerText = "⚠️ Not logged in. Please refresh."; return; }
+
+    status.innerText = "Creating profile...";
+
+    const profileData = {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      role: "seller", // merged seller/buyer identity
+      name: name,
+      business: business || "",
+      clientType: clientType,
+      phone: phone,
+      location: location,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    // Matches the schema app.js's createSellerProfile()/loadSellerProfile()
+    // expect, so this person's products & profile page work right away.
+    const sellerProfileData = {
+      uid: currentUser.uid,
+      email: currentUser.email,
+      name: business || name,
+      bio: bio || "",
+      image: image || "",
+      verified: false,
+      sponsored: false,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    db.collection("users").doc(currentUser.uid).set(profileData)
+      .then(() => {
+        return db.collection("sellers").doc(currentUser.uid).set(sellerProfileData);
+      })
+      .then(() => {
+        status.style.color = "gold";
+        status.innerText = "✅ Profile created! Redirecting...";
+        setTimeout(() => { window.location.href = "home.html"; }, 1500);
+      })
+      .catch(err => {
+        status.innerText = "Error: " + err.message;
+      });
+  }
+</script>
+
+</body>
+</html>
