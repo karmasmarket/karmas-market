@@ -429,238 +429,167 @@ header h1{ font-size:24px; }
   <h2 class="page-title">Affiliate Deals</h2>
   <div id="affiliateFeed" class="grid"></div>
 </section>
-
 <!-- CLIENT DASHBOARD -->
 <section id="clientDashboard" class="page">
   <h2 class="page-title">Client Dashboard</h2>
   <div id="clientOrders" class="grid"></div>
 </section>
+
 <!-- FREELANCER DASHBOARD -->
-
 <section id="freelancerDashboard" class="page">
-
   <h2 class="page-title">Freelancer Dashboard</h2>
-
   <div id="freelancerEarnings" class="sell-box"><h3>Earnings Loading...</h3></div>
-
   <div id="freelancerOrders" class="grid"></div>
-
 </section>
-
-
 
 <!-- APP MARKETPLACE -->
-
 <section id="appMarketplace" class="page">
-
   <h2 class="page-title">Developer Marketplace</h2>
-
   <div class="sell-box">
-
     <h3 style="color:gold;">Post Your App</h3>
-
     <input id="appName" placeholder="App Name">
-
     <input id="developerName" placeholder="Developer Name">
-
     <input id="appCategory" placeholder="Category">
-
     <input id="appPrice" type="number" placeholder="Price">
-
     <input id="appLink" placeholder="APK / Website Link">
-
     <input id="appImage" placeholder="Image URL">
-
     <textarea id="appDescription" placeholder="Description"></textarea>
-
     <button onclick="postApp()">Publish App</button>
-
   </div>
-
   <div id="appFeed" class="grid"></div>
-
 </section>
-
-
 
 <!-- CHAT PAGE -->
-
 <section id="chatPage" class="page">
-
   <h2 class="page-title">Live Chat</h2>
-
   <div id="chatMessages" class="chat-box"></div>
-
   <input id="chatInput" class="search" placeholder="Type your message...">
-
   <button onclick="sendMessage()">Send Message</button>
-
 </section>
-
-
 
 <!-- CONVERSATIONS PAGE -->
-
 <section id="conversationsPage" class="page">
-
   <h2 class="page-title">Conversations</h2>
-
   <div id="conversationList" style="display:flex; flex-direction:column; gap:15px;"></div>
-
 </section>
-
-
 
 <!-- NOTIFICATIONS PAGE -->
-
 <section id="notificationPage" class="page">
-
   <h2 class="page-title">Notifications</h2>
-
   <div id="notificationFeed" style="display:flex; flex-direction:column; gap:15px;"></div>
-
 </section>
-
-
 
 <!-- ORDERS PAGE -->
-
 <section id="ordersPage" class="page">
-
   <h2 class="page-title">Orders</h2>
-
   <div id="ordersFeed" class="grid"></div>
-
 </section>
-
-
 
 <!-- WALLET PAGE -->
-
 <section id="walletPage" class="page">
-
   <h2 class="page-title">Wallet</h2>
-
   <div class="profile-box">
-
     <h3 style="color:gold;">Available Balance</h3>
-
     <h1 id="walletBalance" style="margin-top:15px; color:gold;">₦0</h1>
+    <button onclick="showWithdrawalForm()" style="background:#FF9800; color:white;">Request Withdrawal</button>
+  </div>
+</section>
 
-    <button onclick="withdrawWallet()">Withdraw Funds</button>
+<!-- WITHDRAWAL PAGE -->
+<section id="withdrawalPage" class="page">
+
+  <button onclick="showPage('walletPage')">← Back</button>
+  <h2 class="page-title">Request Withdrawal</h2>
+
+  <div style="background:#0a0a0a; padding:20px; border-radius:12px; margin-bottom:20px;">
+
+    <div style="margin-bottom:15px;">
+      <label style="display:block; margin-bottom:5px; color:#bbb; font-size:12px;">Amount (₦)</label>
+      <input id="withdrawAmount" type="number" class="search" placeholder="Enter amount" min="1000">
+      <p style="margin-top:3px; font-size:11px; color:#888;">Minimum: ₦1,000</p>
+    </div>
+
+    <div style="margin-bottom:15px;">
+      <label style="display:block; margin-bottom:5px; color:#bbb; font-size:12px;">Bank</label>
+      <select id="bankSelect" class="search" style="width:100%; padding:10px; background:#1a1a1a; color:#fff; border:1px solid #333; border-radius:8px;">
+        <option value="">Loading banks...</option>
+      </select>
+    </div>
+
+    <div style="margin-bottom:15px;">
+      <label style="display:block; margin-bottom:5px; color:#bbb; font-size:12px;">Account Number</label>
+      <input id="accountNumber" type="text" class="search" placeholder="10-digit account number" maxlength="10">
+    </div>
+
+    <div style="margin-bottom:15px;">
+      <label style="display:block; margin-bottom:5px; color:#bbb; font-size:12px;">Account Name</label>
+      <input id="accountName" type="text" class="search" placeholder="Name on account">
+    </div>
+
+    <button onclick="requestWithdrawal()" style="width:100%; padding:12px; background:#4caf50; color:white; border:none; border-radius:8px; font-weight:bold; cursor:pointer; font-size:16px;">
+      Request Withdrawal
+    </button>
 
   </div>
 
+  <h3 style="color:#ccc; margin-top:30px; margin-bottom:15px;">Withdrawal History</h3>
+  <div id="withdrawalHistory" style="margin-top:15px;"></div>
+
 </section>
-
-
 
 <!-- ANALYTICS PAGE -->
-
 <section id="analyticsPage" class="page">
-
   <h2 class="page-title">Marketplace Analytics</h2>
-
   <div class="grid">
-
     <div class="card"><div class="card-body"><h3>Total Products</h3><h1 id="totalProducts" style="color:gold;">0</h1></div></div>
-
     <div class="card"><div class="card-body"><h3>Total Freelancers</h3><h1 id="totalFreelancers" style="color:gold;">0</h1></div></div>
-
     <div class="card"><div class="card-body"><h3>Total Apps</h3><h1 id="totalApps" style="color:gold;">0</h1></div></div>
-
     <div class="card"><div class="card-body"><h3>Total Orders</h3><h1 id="totalOrders" style="color:gold;">0</h1></div></div>
-
     <div class="card"><div class="card-body"><h3>Total Revenue</h3><h1 id="totalRevenue" style="color:gold;">₦0</h1></div></div>
-
     <div class="card"><div class="card-body"><h3>Affiliate Clicks</h3><h1 id="totalClicks" style="color:gold;">0</h1></div></div>
-
   </div>
-
   <br>
-
   <canvas id="analyticsChart" height="120"></canvas>
-
 </section>
-
-
 
 <!-- PROFILE PAGE -->
-
 <section id="profile" class="page">
-
   <div class="profile-box">
-
     <h2 style="color:gold;">Your Profile</h2>
-
     <p id="userEmail" class="small">Loading...</p>
-
     <br>
-
     <button onclick="showPage('walletPage')">Wallet</button>
-
     <button onclick="showPage('ordersPage')">Orders</button>
-
     <button onclick="showPage('conversationsPage')">Messages</button>
-
     <button onclick="showPage('analyticsPage')">Analytics</button>
-
     <button onclick="logout()" class="alt">Logout</button>
-
   </div>
-
 </section>
-
-
 
 <!-- =====================
-
      POLICY PAGES
-
 ===================== -->
 
-
-
 <!-- ABOUT -->
-
 <section id="aboutPage" class="page">
-
   <h2 class="page-title">About Karmas Market</h2>
-
   <div class="sell-box">
-
     <h3 style="color:gold;">Who We Are</h3>
-
     <p class="small">Karmas Market is a Nigerian digital marketplace built to empower entrepreneurs, freelancers, creators, and businesses to buy, sell, and grow online. We provide a platform where digital products, services, apps, and creative tools come together in one place.</p>
-
     <br>
-
     <h3 style="color:gold;">Our Mission</h3>
-
     <p class="small">To make digital commerce accessible, affordable, and secure for every Nigerian — from solo freelancers to growing businesses.</p>
-
     <br>
-
     <h3 style="color:gold;">What We Offer</h3>
-
     <p class="small">• <strong style="color:gold;">Products</strong> — Buy and sell digital goods<br>
-
        • <strong style="color:gold;">Services</strong> — Hire and offer freelance services<br>
-
        • <strong style="color:gold;">Apps</strong> — Discover and distribute apps<br>
-
        • <strong style="color:gold;">Creator Tools</strong> — Design flyers, ads and videos with Karma Ad Maker</p>
-
     <br>
-
     <h3 style="color:gold;">Contact</h3>
-
     <p class="small">Email: support@karmasmarket.ng<br>Website: karmas-services.com.ng<br>Nigeria 🇳🇬</p>
-
   </div>
-
 </section>
-
 <!-- CONTACT -->
 <section id="contactPage" class="page">
   <h2 class="page-title">Contact Us</h2>
@@ -799,281 +728,7 @@ header h1{ font-size:24px; }
     <p class="small">We will review all valid DMCA notices and remove infringing content within 5 business days.</p>
   </div>
 </section>
-<!-- CONTACT -->
 
-<section id="contactPage" class="page">
-
-  <h2 class="page-title">Contact Us</h2>
-
-  <div class="sell-box">
-
-    <h3 style="color:gold;">Get In Touch</h3>
-
-    <p class="small">We're here to help. Reach out through any of the channels below.</p>
-
-    <br>
-
-    <p class="small">📧 <strong>Email:</strong> support@karmasmarket.ng</p>
-
-    <p class="small">🌐 <strong>Website:</strong> karmas-services.com.ng</p>
-
-    <br>
-
-    <h3 style="color:gold;">Send a Message</h3>
-
-    <input id="contactName" placeholder="Your Name">
-
-    <input id="contactEmail" placeholder="Your Email">
-
-    <textarea id="contactMessage" placeholder="Your Message" style="width:100%; height:120px; margin-top:10px; background:rgba(255,255,255,.04); color:white; border:none; border-radius:14px; padding:14px;"></textarea>
-
-    <button onclick="submitContact()">Send Message</button>
-
-    <div id="contactResult" style="margin-top:10px; color:gold; font-size:13px;"></div>
-
-  </div>
-
-</section>
-
-
-
-<!-- PRIVACY POLICY -->
-
-<section id="privacyPage" class="page">
-
-  <h2 class="page-title">Privacy Policy</h2>
-
-  <div class="sell-box">
-
-    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
-
-    <h3 style="color:gold;">Information We Collect</h3>
-
-    <p class="small">We collect information you provide when registering, listing products, or contacting us — including your name, email address, and payment details. We also collect usage data such as pages visited and features used.</p><br>
-
-    <h3 style="color:gold;">How We Use Your Information</h3>
-
-    <p class="small">Your information is used to operate the platform, process transactions, communicate with you, improve our services, and comply with legal obligations.</p><br>
-
-    <h3 style="color:gold;">Data Sharing</h3>
-
-    <p class="small">We do not sell your personal data. We may share data with payment processors (Flutterwave) and service providers strictly necessary to operate Karmas Market.</p><br>
-
-    <h3 style="color:gold;">Data Security</h3>
-
-    <p class="small">We use Firebase Authentication and industry-standard security practices to protect your data.</p><br>
-
-    <h3 style="color:gold;">Your Rights</h3>
-
-    <p class="small">You may request access to, correction of, or deletion of your personal data by contacting support@karmasmarket.ng.</p>
-
-  </div>
-
-</section>
-
-
-
-<!-- TERMS OF SERVICE -->
-
-<section id="termsPage" class="page">
-
-  <h2 class="page-title">Terms of Service</h2>
-
-  <div class="sell-box">
-
-    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
-
-    <h3 style="color:gold;">Acceptance of Terms</h3>
-
-    <p class="small">By accessing or using Karmas Market, you agree to be bound by these Terms of Service.</p><br>
-
-    <h3 style="color:gold;">User Accounts</h3>
-
-    <p class="small">You must provide accurate information when creating an account. You are responsible for all activity that occurs under your account.</p><br>
-
-    <h3 style="color:gold;">Buying & Selling</h3>
-
-    <p class="small">Sellers are responsible for the accuracy of their listings. All transactions are subject to our escrow and payment policies.</p><br>
-
-    <h3 style="color:gold;">Prohibited Activities</h3>
-
-    <p class="small">You may not use Karmas Market to sell illegal goods, engage in fraud, spam other users, infringe intellectual property rights, or violate any Nigerian law.</p><br>
-
-    <h3 style="color:gold;">Commission & Fees</h3>
-
-    <p class="small">Karmas Market charges a commission on successful transactions. Rates vary by category and are displayed at the time of listing.</p><br>
-
-    <h3 style="color:gold;">Governing Law</h3>
-
-    <p class="small">These terms are governed by the laws of the Federal Republic of Nigeria.</p>
-
-  </div>
-
-</section>
-
-
-
-<!-- COMMUNITY GUIDELINES -->
-
-<section id="communityPage" class="page">
-
-  <h2 class="page-title">Community Guidelines</h2>
-
-  <div class="sell-box">
-
-    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
-
-    <h3 style="color:gold;">Be Respectful</h3>
-
-    <p class="small">Treat all users with respect. Harassment, hate speech, or abuse of any kind will not be tolerated.</p><br>
-
-    <h3 style="color:gold;">Be Honest</h3>
-
-    <p class="small">List only what you can deliver. Fraudulent activity will result in permanent account removal.</p><br>
-
-    <h3 style="color:gold;">Protect Privacy</h3>
-
-    <p class="small">Do not share other users' personal information without their consent.</p><br>
-
-    <h3 style="color:gold;">No Spam</h3>
-
-    <p class="small">Do not send unsolicited messages or engage in any activity that disrupts the platform.</p><br>
-
-    <h3 style="color:gold;">Report Violations</h3>
-
-    <p class="small">Report violations to support@karmasmarket.ng.</p>
-
-  </div>
-
-</section>
-
-
-
-<!-- COOKIE POLICY -->
-
-<section id="cookiePage" class="page">
-
-  <h2 class="page-title">Cookie Policy</h2>
-
-  <div class="sell-box">
-
-    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
-
-    <h3 style="color:gold;">What Are Cookies</h3>
-
-    <p class="small">Cookies are small text files stored on your device that help us remember your preferences and improve your experience.</p><br>
-
-    <h3 style="color:gold;">How We Use Cookies</h3>
-
-    <p class="small">We use cookies to keep you logged in, remember your settings, and analyse platform usage.</p><br>
-
-    <h3 style="color:gold;">Managing Cookies</h3>
-
-    <p class="small">You can control cookies through your browser settings. Disabling cookies may affect some features.</p><br>
-
-    <h3 style="color:gold;">Third-Party Cookies</h3>
-
-    <p class="small">Firebase and Flutterwave may set their own cookies which we do not control.</p>
-
-  </div>
-
-</section>
-
-
-
-<!-- REFUND POLICY -->
-
-<section id="refundPage" class="page">
-
-  <h2 class="page-title">Refund Policy</h2>
-
-  <div class="sell-box">
-
-    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
-
-    <h3 style="color:gold;">Digital Products</h3>
-
-    <p class="small">All sales are final once a product has been downloaded or accessed. Refunds are only issued where the product is proven to be significantly different from its description.</p><br>
-
-    <h3 style="color:gold;">Services / Freelancing</h3>
-
-    <p class="small">Funds are held in escrow until the buyer confirms delivery. If a seller fails to deliver, the buyer may raise a dispute and receive a full refund.</p><br>
-
-    <h3 style="color:gold;">How to Request a Refund</h3>
-
-    <p class="small">Contact support@karmasmarket.ng within 7 days of purchase with your order details.</p><br>
-
-    <h3 style="color:gold;">Approved Refunds</h3>
-
-    <p class="small">Approved refunds are returned to your Karmas Wallet within 5-7 business days.</p>
-
-  </div>
-
-</section>
-
-
-
-<!-- SELLER POLICY -->
-
-<section id="sellerPolicyPage" class="page">
-
-  <h2 class="page-title">Seller Policy</h2>
-
-  <div class="sell-box">
-
-    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
-
-    <h3 style="color:gold;">Eligibility</h3>
-
-    <p class="small">Anyone with a verified account may sell on the platform. You must be 18 years or older.</p><br>
-
-    <h3 style="color:gold;">Listing Requirements</h3>
-
-    <p class="small">All listings must be accurate, clearly described, and priced in Nigerian Naira (₦).</p><br>
-
-    <h3 style="color:gold;">Prohibited Items</h3>
-
-    <p class="small">You may not sell illegal content, stolen goods, counterfeit products, adult content, or anything that violates Nigerian law.</p><br>
-
-    <h3 style="color:gold;">Commission</h3>
-
-    <p class="small">Karmas Market deducts a commission from each successful sale. The rate depends on your product category.</p><br>
-
-    <h3 style="color:gold;">Payouts</h3>
-
-    <p class="small">Earnings are credited to your Karmas Wallet and are withdrawable to your Nigerian bank account.</p>
-
-  </div>
-
-</section>
-
-
-
-<!-- COPYRIGHT & DMCA -->
-
-<section id="copyrightPage" class="page">
-
-  <h2 class="page-title">Copyright & DMCA Policy</h2>
-
-  <div class="sell-box">
-
-    <p style="color:#666; font-size:12px;">Last updated: July 2026</p><br>
-
-    <h3 style="color:gold;">Intellectual Property</h3>
-
-    <p class="small">All content you upload must be your original work or properly licensed. You retain ownership but grant Karmas Market a licence to display it on the platform.</p><br>
-
-    <h3 style="color:gold;">DMCA Takedown Requests</h3>
-
-    <p class="small">If you believe your copyrighted work has been used without permission, send a written notice to support@karmasmarket.ng with your contact details and the URL of the infringing content.</p><br>
-
-    <h3 style="color:gold;">Our Response</h3>
-
-    <p class="small">We will review all valid DMCA notices and remove infringing content within 5 business days.</p>
-
-  </div>
-
-</section>
 <!-- AI USAGE POLICY -->
 <section id="aiPolicyPage" class="page">
   <h2 class="page-title">AI Usage Policy</h2>
@@ -1127,8 +782,7 @@ header h1{ font-size:24px; }
     <p style="color:#FFD700; font-size:14px; font-weight:bold; margin-top:10px; letter-spacing:2px;">KARMAS MARKET</p>
     <p style="color:#666; font-size:11px; margin-top:4px;">Buy • Sell • Freelance • Apps</p>
   </div>
-
-  <!-- Policy links -->
+   <!-- Policy links -->
   <div class="footer-links">
     <a onclick="showPage('aboutPage')">About Us</a>
     <a onclick="showPage('contactPage')">Contact Us</a>
@@ -1211,6 +865,11 @@ function showPage(id, btn){
   document.querySelectorAll(".nav-btn").forEach(button => button.classList.remove("active"));
   if(btn){ btn.classList.add("active"); }
   window.scrollTo({ top:0, behavior:"smooth" });
+
+  if(id === "withdrawalPage"){
+    if(typeof loadBankList === "function") loadBankList();
+    if(typeof loadWithdrawalHistory === "function") loadWithdrawalHistory();
+  }
 }
 
 window.addEventListener("load", () => {

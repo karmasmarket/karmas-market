@@ -409,6 +409,7 @@ async function clearNotifications(){
     await batch.commit();
 
 }
+
 /* ==================================
 PRODUCT POSTING
 ================================== */
@@ -530,7 +531,6 @@ document.addEventListener("DOMContentLoaded", ()=>{
         displayItems();
     }
 });
-
 /* ==================================
 PRODUCT PAYMENT (tiered commission)
 ================================== */
@@ -596,6 +596,7 @@ function payForItem(title, price, seller, itemId){
     });
 
 }
+
 /* ==================================
 FREELANCER SYSTEM
 ================================== */
@@ -799,6 +800,7 @@ function loadReviews(freelancerId){
     });
 
 }
+
 /* ==================================
 ORDERS (privacy-filtered)
 ================================== */
@@ -856,7 +858,6 @@ function loadOrders(){
     });
 
 }
-
 /* ==================================
 ESCROW RELEASE (commission-aware)
 ================================== */
@@ -929,6 +930,34 @@ function openChat(itemId, sellerId){
 
 }
 
+/* ==================================
+CHAT MESSAGE FILTER
+Blocks phone numbers, WhatsApp links,
+Telegram handles, and email addresses
+to prevent off-platform transactions
+================================== */
+
+function validateChatMessage(message){
+
+    const blockedPatterns = [
+        /\+?[0-9]{7,}/,                                            // Phone numbers
+        /wa\.me/i,                                                 // WhatsApp links
+        /whatsapp\.com/i,                                          // WhatsApp web
+        /telegram\.me/i,                                           // Telegram
+        /(?<![a-zA-Z])t\.me(?![a-zA-Z])/i,                        // Telegram short link
+        /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/      // Email addresses
+    ];
+
+    for(let pattern of blockedPatterns){
+        if(pattern.test(message)){
+            return false;
+        }
+    }
+
+    return true;
+
+}
+
 function sendMessage(){
 
     const input = document.getElementById("chatInput");
@@ -938,6 +967,12 @@ function sendMessage(){
 
     const message = input.value.trim();
     if(!message) return;
+
+    // BLOCK external contact info - protect platform transactions
+    if(!validateChatMessage(message)){
+        alert("⚠️ External contact information is not allowed. Keep all communication and payments inside Karmas Market to stay protected.");
+        return;
+    }
 
     if(!currentChatId){
         currentChatId = "general";
@@ -1206,6 +1241,7 @@ function loadSellerProducts(sellerName){
     });
 
 }
+
 async function createSellerProfile(){
 
     const user = auth.currentUser;
@@ -1358,6 +1394,7 @@ function loadSellerStats(){
     });
 
 }
+
 function loadSellerSubscription(){
 
     const user = auth.currentUser;
@@ -1433,7 +1470,6 @@ async function promoteProduct(productId){
     }
 
 }
-
 /* ==================================
 APP MARKETPLACE
 ================================== */
@@ -1526,6 +1562,7 @@ function postApp(){
     });
 
 }
+
 function clearAppForm(){
 
     document.getElementById("appName").value = "";
@@ -1658,6 +1695,7 @@ function loadFeaturedApps(){
     });
 
 }
+
 /* ==================================
 AFFILIATE / SPONSORED ADS
 ================================== */
@@ -1780,6 +1818,7 @@ async function submitPromotion(){
     });
 
 }
+
 function loadAffiliateAds(){
 
     const feed = document.getElementById("affiliateFeed");
@@ -1931,6 +1970,7 @@ async function createSponsoredAd(){
     }
 
 }
+
 function loadFeaturedAds(){
 
     const container = document.getElementById("featuredAdsFeed");
@@ -2017,7 +2057,6 @@ function payForAdvertisement(tier){
     });
 
 }
-
 /* ==================================
 KARMAS-TOOLS
 (Redirects pass the logged-in user's
@@ -2144,6 +2183,7 @@ function exportPNG(){
     });
 
 }
+
 async function exportPDF(){
 
     const target = document.getElementById("canvasContainer");
@@ -2386,6 +2426,7 @@ function loadAdminApps(){
     });
 
 }
+
 /* ==================================
 ADMIN — FREELANCERS / SELLERS
 ================================== */
@@ -2696,6 +2737,140 @@ function generateAdminReport(){
     });
 
 }
+/* ==================================
+WITHDRAWAL SYSTEM
+Seller/Freelancer bank payouts
+================================== */
+
+function showWithdrawalForm(){
+    showPage("withdrawalPage");
+    loadBankList();
+}
+
+function loadBankList(){
+    
+    const bankSelect = document.getElementById("bankSelect");
+    if(!bankSelect) return;
+
+    firebase.functions().httpsCallable('getBankList')()
+    .then(result => {
+        const banks = result.data;
+        bankSelect.innerHTML = '<option value="">Select your bank...</option>';
+        banks.forEach(bank => {
+            bankSelect.innerHTML += `<option value="${bank.code}">${bank.name}</option>`;
+        });
+    })
+    .catch(error => {
+        console.error('Error loading banks:', error);
+        alert('Could not load bank list. Please try again.');
+    });
+
+}
+
+function requestWithdrawal(){
+    
+    const user = auth.currentUser;
+    if(!user) return alert("Please log in first");
+
+    const amount = Number(document.getElementById("withdrawAmount").value);
+    const bankCode = document.getElementById("bankSelect").value;
+    const accountNumber = document.getElementById("accountNumber").value;
+    const accountName = document.getElementById("accountName").value;
+
+    if(!amount || amount < 1000){
+        alert("Minimum withdrawal is ₦1,000");
+        return;
+    }
+
+    if(!bankCode || !accountNumber || !accountName){
+        alert("Please fill in all fields");
+        return;
+    }
+
+    if(accountNumber.length !== 10){
+        alert("Account number must be exactly 10 digits");
+        return;
+    }
+
+    db.collection('wallets').doc(user.uid).get()
+    .then(doc => {
+        
+        if(!doc.exists || doc.data().balance < amount){
+            alert("Insufficient balance");
+            return;
+        }
+
+        db.collection('withdrawals').add({
+            userId: user.uid,
+            amount: amount,
+            bankCode: bankCode,
+            bankAccount: accountNumber,
+            accountName: accountName,
+            status: 'pending',
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        })
+        .then(docRef => {
+            alert(`✅ Withdrawal request submitted. Reference: ${docRef.id}\nWe'll process this within 24 hours.`);
+            document.getElementById("withdrawAmount").value = "";
+            document.getElementById("bankSelect").value = "";
+            document.getElementById("accountNumber").value = "";
+            document.getElementById("accountName").value = "";
+            showPage("walletPage");
+        })
+        .catch(error => {
+            alert("Error submitting withdrawal: " + error.message);
+        });
+
+    });
+
+}
+
+function loadWithdrawalHistory(){
+    
+    const user = auth.currentUser;
+    if(!user) return;
+
+    const historyBox = document.getElementById("withdrawalHistory");
+    if(!historyBox) return;
+
+    db.collection('withdrawals')
+    .where('userId', '==', user.uid)
+    .orderBy('createdAt', 'desc')
+    .limit(20)
+    .onSnapshot(snapshot => {
+        
+        historyBox.innerHTML = "";
+
+        if(snapshot.empty){
+            historyBox.innerHTML = "<p style='text-align:center; color:#888;'>No withdrawals yet</p>";
+            return;
+        }
+
+        snapshot.forEach(doc => {
+            const w = doc.data();
+            const status = w.status === 'completed' ? '✅' : w.status === 'failed' ? '❌' : '⏳';
+            const date = w.createdAt ? new Date(w.createdAt.toDate()).toLocaleDateString() : 'N/A';
+            
+            historyBox.innerHTML += `
+                <div style="background:#1a1a1a; padding:12px; margin-bottom:8px; border-radius:8px; border-left:4px solid ${w.status === 'completed' ? '#4caf50' : w.status === 'failed' ? '#f44336' : '#ff9800'};">
+                    <div style="display:flex; justify-content:space-between;">
+                        <div>
+                            <p style="margin:0; font-weight:bold;">₦${w.amount.toLocaleString()}</p>
+                            <p style="margin:5px 0 0 0; font-size:12px; color:#aaa;">${w.accountName} • ${date}</p>
+                        </div>
+                        <div style="text-align:right;">
+                            <p style="margin:0; font-size:18px;">${status}</p>
+                            <p style="margin:5px 0 0 0; font-size:11px; color:#aaa;">${w.status}</p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        });
+
+    });
+
+}
+
 
 /* ==================================
 APP INITIALIZATION
