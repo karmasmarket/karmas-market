@@ -41,10 +41,22 @@ self.addEventListener("activate", event => {
 
 // Fetch — serve from cache, fall back to network
 self.addEventListener("fetch", event => {
+  const url = event.request.url;
+
+  // Bypass service worker for Firebase/Google API calls and non-GET requests
+  if (
+    event.request.method !== "GET" ||
+    url.includes("googleapis.com") ||
+    url.includes("google.com") ||
+    url.includes("firebaseio.com") ||
+    url.includes("gstatic.com")
+  ) {
+    return; // Let the browser handle it normally, no interception
+  }
+
   event.respondWith(
     caches.match(event.request).then(cached => {
       return cached || fetch(event.request).catch(() => {
-        // If offline and not cached, show offline page
         if (event.request.destination === "document") {
           return caches.match("/index.html");
         }
