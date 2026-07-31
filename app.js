@@ -1371,174 +1371,7 @@ freelancerId
 
 }
 
-/* ==================================
-LOAD ORDERS
-================================== */
 
-function loadOrders(){
-
-const feed =
-document.getElementById(
-"ordersFeed"
-);
-
-if(!feed) return;
-
-db.collection("orders")
-
-.orderBy(
-"createdAt",
-"desc"
-)
-
-.onSnapshot(snapshot=>{
-
-    feed.innerHTML = "";
-
-    snapshot.forEach(doc=>{
-
-        const order =
-        doc.data();
-
-        feed.innerHTML += `
-
-        <div class="card">
-
-            <div class="card-body">
-
-                <h3>
-
-                ${order.freelancerName}
-
-                </h3>
-
-                <p>
-
-                ₦${order.amount}
-
-                </p>
-
-                <p>
-
-                ${order.status}
-
-                </p>
-
-                <button
-
-                onclick="
-                completeOrder(
-                '${doc.id}'
-                )
-                "
-
-                >
-
-                Approve Work
-
-                </button>
-
-            </div>
-
-        </div>
-
-        `;
-
-    });
-
-});
-
-}
-
-/* ==================================
-COMPLETE ORDER
-================================== */
-
-function completeOrder(
-
-orderId
-
-){
-
-db.collection("orders")
-
-.doc(orderId)
-
-.get()
-
-.then(doc=>{
-
-    if(!doc.exists) return;
-
-    const order =
-    doc.data();
-
-    addWalletBalance(
-
-    order.freelancerId,
-
-    Number(
-    order.amount
-    )
-
-    );
-
-    db.collection("orders")
-
-    .doc(orderId)
-
-    .update({
-
-        status:
-        "completed",
-
-        paymentStatus:
-        "released",
-
-        approved:true
-
-    })
-
-    .then(()=>{
-
-        db.collection(
-        "notifications"
-        )
-
-        .add({
-
-            title:
-            "✅ Payment Released",
-
-            message:
-
-            "Payment for " +
-
-            order.freelancerName +
-
-            " has been released.",
-
-            createdAt:
-
-            firebase.firestore
-            .FieldValue
-            .serverTimestamp()
-
-        });
-
-        alert(
-        "Payment Released"
-        );
-
-    });
-
-});
-
-}
-
-console.log(
-"APP SECTION C LOADED"
-);
 /* ==================================
 CHAT SYSTEM
 ================================== */
@@ -2228,55 +2061,54 @@ function submitReview(freelancerId){
 
 function loadOrders(){
 
-    const feed =
-    document.getElementById(
-    "ordersFeed"
-    );
-
+    const feed = document.getElementById("ordersFeed");
     if(!feed) return;
 
-    db.collection("orders")
-    .orderBy("createdAt","desc")
-    .onSnapshot(snapshot=>{
+    const user = auth.currentUser;
+    if(!user) return;
 
-        feed.innerHTML = "";
+    feed.innerHTML = "";
 
-        snapshot.forEach(doc=>{
+    const seen = new Set();
 
-            const order =
-            doc.data();
+    function renderOrder(doc){
+        if(seen.has(doc.id)) return;
+        seen.add(doc.id);
 
-            feed.innerHTML += `
+        const order = doc.data();
+        const label = order.title || order.freelancerName || "Order";
+        const amount = order.totalPaid || order.amount || 0;
 
-            <div class="card">
-
-                <div class="card-body">
-
-                    <h3>
-                    ${order.freelancerName}
-                    </h3>
-
-                    <p>
-                    ₦${order.amount}
-                    </p>
-
-                    <p>
-                    Status:
-                    ${order.status}
-                    </p>
-
-                </div>
-
+        feed.innerHTML += `
+        <div class="card">
+            <div class="card-body">
+                <h3>${label}</h3>
+                <p>₦${amount}</p>
+                <p>Status: ${order.status}</p>
+                ${order.status === "in_escrow" ? `<button onclick="completeOrder('${doc.id}')">Approve Work</button>` : ""}
             </div>
+        </div>`;
+    }
 
-            `;
+    db.collection("orders")
+    .where("buyer", "==", user.email)
+    .onSnapshot(snapshot=>{
+        snapshot.forEach(renderOrder);
+    });
 
-        });
+    db.collection("orders")
+    .where("client", "==", user.email)
+    .onSnapshot(snapshot=>{
+        snapshot.forEach(renderOrder);
+    });
 
+    db.collection("orders")
+    .where("sellerEmail", "==", user.email)
+    .onSnapshot(snapshot=>{
+        snapshot.forEach(renderOrder);
     });
 
 }
-
 /* ==========================================
    COMPLETE ORDER
 ========================================== */
