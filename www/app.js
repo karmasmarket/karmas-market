@@ -65,6 +65,19 @@ function calculateCommission(price){
 }
 
 /* ==================================
+AUTH PERSISTENCE
+(keeps users logged in across brief
+network drops instead of forcing
+re-auth on every hiccup)
+================================== */
+
+try{
+    auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+}catch(error){
+    console.log("Persistence setup error:", error);
+}
+
+/* ==================================
 AUTH STATE
 ================================== */
 
@@ -94,16 +107,108 @@ auth.onAuthStateChanged((user)=>{
 });
 
 /* ==================================
+INPUT SANITIZATION
+Strips HTML tags from user-supplied
+text before it's ever written to
+Firestore, so stored data can't carry
+a script/markup injection payload.
+Apply this to any free-text field
+before saving (messages, reviews,
+product titles/descriptions, contact
+form, promo text, etc).
+================================== */
+
+function sanitizeText(value){
+
+    if(value === null || value === undefined) return "";
+
+    return String(value)
+        .replace(/<[^>]*>/g, "")   // strip HTML tags
+        .replace(/[<>]/g, "")      // strip any stray angle brackets
+        .trim();
+
+}
+
+/* ==================================
+LOGIN RATE LIMITING
+Simple client-side cooldown: blocks
+rapid repeated login attempts to slow
+down brute-force guessing. This is a
+first line of defense only — it does
+not replace Firebase App Check or
+server-side throttling.
+================================== */
+
+const LOGIN_MAX_ATTEMPTS = 5;
+const LOGIN_WINDOW_MS = 60000; // 1 minute
+let loginAttempts = [];
+
+function isLoginRateLimited(){
+
+    const now = Date.now();
+
+    loginAttempts = loginAttempts.filter(t => now - t < LOGIN_WINDOW_MS);
+
+    if(loginAttempts.length >= LOGIN_MAX_ATTEMPTS){
+        return true;
+    }
+
+    loginAttempts.push(now);
+    return false;
+
+}
+
+/* ==================================
+NETWORK / AUTH ERROR MESSAGING
+Translates raw Firebase error codes
+into messages a non-technical user
+can actually act on.
+================================== */
+
+function friendlyAuthError(error){
+
+    const code = error && error.code ? error.code : "";
+
+    if(!navigator.onLine){
+        return "You appear to be offline. Please check your internet connection and try again.";
+    }
+
+    switch(code){
+        case "auth/network-request-failed":
+            return "Connection lost. Please check your internet and try again.";
+        case "auth/user-not-found":
+        case "auth/wrong-password":
+        case "auth/invalid-credential":
+            return "Incorrect email or password. Please check your details and try again.";
+        case "auth/too-many-requests":
+            return "Too many attempts. Please wait a few minutes before trying again.";
+        case "auth/invalid-email":
+            return "Please enter a valid email address.";
+        case "auth/email-already-in-use":
+            return "An account with this email already exists.";
+        case "auth/weak-password":
+            return "Password is too weak. Please use at least 6 characters.";
+        default:
+            return error && error.message ? error.message : "Something went wrong. Please try again.";
+    }
+
+}
+/* ==================================
 SIGN UP / LOGIN / LOGOUT
 ================================== */
 
 function signUp(){
 
-    const email = document.getElementById("email").value;
+    const email = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
 
     if(!email || !password){
         alert("Please enter email and password");
+        return;
+    }
+
+    if(!navigator.onLine){
+        alert("You're offline. Please check your internet connection and try again.");
         return;
     }
 
@@ -112,14 +217,14 @@ function signUp(){
         alert("Account created successfully");
     })
     .catch(error=>{
-        alert(error.message);
+        alert(friendlyAuthError(error));
     });
 
 }
 
 function login(){
 
-    const email = document.getElementById("email").value;
+    const email = document.getElementById("email").value.trim();
     const password = document.getElementById("password").value;
 
     if(!email || !password){
@@ -127,12 +232,35 @@ function login(){
         return;
     }
 
+    if(isLoginRateLimited()){
+        alert("Too many login attempts. Please wait a minute before trying again.");
+        return;
+    }
+
+    if(!navigator.onLine){
+        alert("You're offline. Please check your internet connection and try again.");
+        return;
+    }
+
+    // Safety timeout: if Firebase hangs longer than expected on a flaky
+    // connection, tell the user instead of leaving them stuck with no feedback.
+    let settled = false;
+    const timeoutId = setTimeout(()=>{
+        if(!settled){
+            alert("This is taking longer than usual. Please check your connection and try again.");
+        }
+    }, 10000);
+
     auth.signInWithEmailAndPassword(email, password)
     .then(()=>{
+        settled = true;
+        clearTimeout(timeoutId);
         window.location.href = "home.html";
     })
     .catch(error=>{
-        alert(error.message);
+        settled = true;
+        clearTimeout(timeoutId);
+        alert(friendlyAuthError(error));
     });
 
 }
@@ -144,7 +272,7 @@ function logout(){
         window.location.href = "index.html";
     })
     .catch(error=>{
-        alert(error.message);
+        alert(friendlyAuthError(error));
     });
 
 }
@@ -172,6 +300,11 @@ function showPage(id, btn){
     }
 
     window.scrollTo({ top:0, behavior:"smooth" });
+
+    if(id === "withdrawalPage"){
+        if(typeof loadBankList === "function") loadBankList();
+        if(typeof loadWithdrawalHistory === "function") loadWithdrawalHistory();
+    }
 
 }
 
@@ -202,16 +335,10 @@ function searchApps(value){
     });
 
 }
+
 /* ==================================
 LOADER / ONBOARDING
 ================================== */
-
-window.addEventListener("load", ()=>{
-    const loader = document.getElementById("loader");
-    if(loader){
-        setTimeout(()=>{ loader.style.display = "none"; }, 1500);
-    }
-});
 
 function closeOnboarding(){
     const onboarding = document.getElementById("onboarding");
@@ -227,8 +354,8 @@ NOTIFICATIONS
 function createNotification(title, message){
 
     db.collection("notifications").add({
-        title,
-        message,
+        title: sanitizeText(title),
+        message: sanitizeText(message),
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
@@ -408,7 +535,6 @@ async function clearNotifications(){
     await batch.commit();
 
 }
-
 /* ==================================
 PRODUCT POSTING
 ================================== */
@@ -422,14 +548,30 @@ async function postItem(){
         return;
     }
 
-    const seller = document.getElementById("sellerName").value.trim();
-    const title = document.getElementById("itemTitle").value.trim();
+    const seller = sanitizeText(document.getElementById("sellerName").value);
+    const title = sanitizeText(document.getElementById("itemTitle").value);
     const price = document.getElementById("itemPrice").value.trim();
-    const description = document.getElementById("itemDescription").value.trim();
+    const description = sanitizeText(document.getElementById("itemDescription").value);
     const imageFile = document.getElementById("itemImageFile").files[0];
 
     if(!seller || !title || !price || !description || !imageFile){
         alert("Please fill all fields");
+        return;
+    }
+
+    // Basic server-independent validation: reject obviously wrong file types/sizes
+    // before spending an upload request on them. Cloudinary still enforces its own
+    // rules on the backend, but this saves the user a failed round-trip.
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    const maxSizeBytes = 8 * 1024 * 1024; // 8MB
+
+    if(!allowedTypes.includes(imageFile.type)){
+        alert("Please upload a JPG, PNG, WEBP or GIF image.");
+        return;
+    }
+
+    if(imageFile.size > maxSizeBytes){
+        alert("Image is too large. Please upload an image under 8MB.");
         return;
     }
 
@@ -476,7 +618,11 @@ async function postItem(){
 
     }catch(error){
         console.error(error);
-        alert(error.message);
+        if(!navigator.onLine){
+            alert("You're offline. Please check your connection and try again.");
+        }else{
+            alert(error.message);
+        }
     }
 
 }
@@ -530,6 +676,7 @@ document.addEventListener("DOMContentLoaded", ()=>{
         displayItems();
     }
 });
+
 /* ==================================
 PRODUCT PAYMENT (tiered commission)
 ================================== */
@@ -595,7 +742,6 @@ function payForItem(title, price, seller, itemId){
     });
 
 }
-
 /* ==================================
 FREELANCER SYSTEM
 ================================== */
@@ -741,7 +887,7 @@ function submitReview(freelancerId){
         return;
     }
 
-    const comment = document.getElementById(`review-${freelancerId}`).value;
+    const comment = sanitizeText(document.getElementById(`review-${freelancerId}`).value);
     const rating = document.getElementById(`rating-${freelancerId}`).value;
 
     db.collection("reviews").add({
@@ -802,6 +948,11 @@ function loadReviews(freelancerId){
 
 /* ==================================
 ORDERS (privacy-filtered)
+FIXED: runs three separately scoped
+queries (buyer / client / sellerEmail)
+instead of pulling every order in the
+database and filtering client-side.
+Cards include a colored status badge.
 ================================== */
 
 function loadOrders(){
@@ -812,49 +963,61 @@ function loadOrders(){
     const user = auth.currentUser;
     if(!user) return;
 
-    db.collection("orders")
-    .orderBy("createdAt", "desc")
-    .onSnapshot(snapshot=>{
+    feed.innerHTML = "";
 
-        feed.innerHTML = "";
+    const seen = new Set();
 
-        snapshot.forEach(doc=>{
+    function statusColor(status){
+        if(status === "completed") return "#22c55e";
+        if(status === "in_escrow") return "#f59e0b";
+        return "#94a3b8";
+    }
 
-            const order = doc.data();
+    function statusText(status){
+        if(status === "completed") return "✅ Completed";
+        if(status === "in_escrow") return "⏳ In Escrow";
+        return status || "Pending";
+    }
 
-            const isParticipant =
-                order.buyer === user.email ||
-                order.client === user.email ||
-                order.sellerEmail === user.email ||
-                order.freelancerId === user.uid;
+    function renderOrder(doc){
 
-            if(!isParticipant && !isAdmin()){
-                return; // skip orders that don't belong to this user
-            }
+        if(seen.has(doc.id)) return;
+        seen.add(doc.id);
 
-            const label = order.title || order.freelancerName || "Order";
-            const amount = order.totalPaid || order.amount || 0;
+        const order = doc.data();
+        const label = order.title || order.freelancerName || "Order";
+        const amount = order.totalPaid || order.amount || 0;
+        const color = statusColor(order.status);
+        const text = statusText(order.status);
 
-            feed.innerHTML += `
-            <div class="card">
-                <div class="card-body">
-                    <h3>${label}</h3>
-                    <p>₦${amount}</p>
-                    <p>Status: ${order.status}</p>
-                    ${
-                        order.status === "in_escrow"
-                        ?
-                        `<button onclick="approveOrder('${doc.id}')">Approve / Release Payment</button>`
-                        :
-                        ""
-                    }
-                </div>
+        const card = document.createElement("div");
+        card.className = "card";
+        card.style.borderLeft = `4px solid ${color}`;
+        card.innerHTML = `
+            <div class="card-body">
+                <h3>${label}</h3>
+                <p class="price">₦${amount}</p>
+                <p class="small" style="color:${color}; font-weight:bold;">${text}</p>
+                ${order.status === "in_escrow" ? `<button onclick="approveOrder('${doc.id}')">Approve / Release Payment</button>` : ""}
             </div>
-            `;
+        `;
 
-        });
+        feed.appendChild(card);
 
-    });
+        if(feed.querySelector(".empty-order-msg")){
+            feed.querySelector(".empty-order-msg").remove();
+        }
+
+    }
+
+    db.collection("orders").where("buyer", "==", user.email)
+        .onSnapshot(snapshot => snapshot.forEach(renderOrder));
+
+    db.collection("orders").where("client", "==", user.email)
+        .onSnapshot(snapshot => snapshot.forEach(renderOrder));
+
+    db.collection("orders").where("sellerEmail", "==", user.email)
+        .onSnapshot(snapshot => snapshot.forEach(renderOrder));
 
 }
 /* ==================================
@@ -908,8 +1071,16 @@ function approveOrder(orderId){
     });
 
 }
+
 /* ==================================
 CHAT SYSTEM (privacy-filtered)
+Renders into the Messenger-style markup
+(.message.sent / .message.received /
+.conversation-item) from style.css.
+All messages are sanitized before being
+written to Firestore. All Firestore
+queries, the anti-scam filter, and auth
+checks are unchanged.
 ================================== */
 
 function openChat(itemId, sellerId){
@@ -922,9 +1093,26 @@ function openChat(itemId, sellerId){
     }
 
     currentChatId = itemId + "_" + sellerId;
+    currentSeller = sellerId;
 
     showPage("chatPage");
+    updateChatHeader(sellerId);
     loadMessages();
+
+}
+
+function updateChatHeader(name){
+
+    const nameEl = document.getElementById("chatHeaderName");
+    const avatarEl = document.getElementById("chatHeaderAvatar");
+
+    if(nameEl){
+        nameEl.innerText = name || "Seller";
+    }
+
+    if(avatarEl){
+        avatarEl.src = "https://api.dicebear.com/7.x/initials/svg?seed=" + encodeURIComponent(name || "Seller");
+    }
 
 }
 
@@ -963,14 +1151,19 @@ function sendMessage(){
 
     if(!input || !user) return;
 
-    const message = input.value.trim();
-    if(!message) return;
+    const rawMessage = input.value.trim();
+    if(!rawMessage) return;
 
     // BLOCK external contact info - protect platform transactions
-    if(!validateChatMessage(message)){
+    if(!validateChatMessage(rawMessage)){
         alert("⚠️ External contact information is not allowed. Keep all communication and payments inside Karmas Market to stay protected.");
         return;
     }
+
+    // Sanitize before writing to Firestore, so stored chat history
+    // can never carry an HTML/script injection payload.
+    const message = sanitizeText(rawMessage);
+    if(!message) return;
 
     if(!currentChatId){
         currentChatId = "general";
@@ -999,10 +1192,26 @@ function sendMessage(){
 
 }
 
+/* Formats a Firestore Timestamp (or null, if not yet
+   committed by the server) into a short time string. */
+function formatMessageTime(createdAt){
+
+    if(!createdAt || typeof createdAt.toDate !== "function"){
+        return "";
+    }
+
+    const date = createdAt.toDate();
+
+    return date.toLocaleTimeString([], { hour:"2-digit", minute:"2-digit" });
+
+}
+
 function loadMessages(){
 
     const box = document.getElementById("chatMessages");
     if(!box) return;
+
+    const user = auth.currentUser;
 
     db.collection("messages")
     .where("chatId", "==", currentChatId)
@@ -1014,11 +1223,13 @@ function loadMessages(){
         snapshot.forEach(doc=>{
 
             const chat = doc.data();
+            const isMine = user && chat.sender === user.email;
+            const time = formatMessageTime(chat.createdAt);
 
             box.innerHTML += `
-            <div style="background:#1a1a1a; padding:12px; margin-bottom:10px; border-radius:12px;">
-                <b style="color:gold;">${chat.sender}</b>
-                <p style="margin-top:5px;">${chat.message}</p>
+            <div class="message ${isMine ? "sent" : "received"}">
+                ${chat.message}
+                ${time ? `<div class="message-time">${time}</div>` : ""}
             </div>
             `;
 
@@ -1045,21 +1256,48 @@ function loadConversations(){
 
         list.innerHTML = "";
 
+        if(snapshot.empty){
+            list.innerHTML = `<p class="small" style="padding:20px; text-align:center;">No conversations yet</p>`;
+            return;
+        }
+
         snapshot.forEach(doc=>{
 
             const chat = doc.data();
 
+            // Show whichever participant isn't the current user, so the
+            // list reads as "who am I talking to" rather than always
+            // showing the last sender (which could be me).
+            const participants = chat.participants || [];
+            const otherParticipant = participants.find(email => email !== user.email) || chat.sender;
+
             list.innerHTML += `
-            <div onclick="currentChatId='${chat.chatId}'; showPage('chatPage'); loadMessages();"
-                 style="background:#111; padding:15px; margin-bottom:10px; border-radius:12px; border:1px solid rgba(255,215,0,.15); cursor:pointer;">
-                <h3 style="color:gold;">${chat.sender}</h3>
-                <p class="small">${chat.lastMessage}</p>
+            <div class="conversation-item" onclick="openConversation('${chat.chatId}', '${otherParticipant}')">
+                <img class="conversation-avatar" src="https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(otherParticipant)}">
+                <div class="conversation-info">
+                    <div class="conversation-name">${otherParticipant}</div>
+                    <div class="conversation-preview">${chat.lastMessage || ""}</div>
+                </div>
             </div>
             `;
 
         });
 
     });
+
+}
+
+/* Opens an existing conversation thread from the conversation
+   list (as opposed to openChat(), which is entered from a
+   product card and builds a fresh chatId). */
+function openConversation(chatId, otherParticipant){
+
+    currentChatId = chatId;
+    currentSeller = otherParticipant;
+
+    showPage("chatPage");
+    updateChatHeader(otherParticipant);
+    loadMessages();
 
 }
 
@@ -1208,8 +1446,8 @@ async function createSellerProfile(){
         return;
     }
 
-    const sellerName = document.getElementById("sellerProfileName")?.value || "";
-    const sellerBio = document.getElementById("sellerProfileBio")?.value || "";
+    const sellerName = sanitizeText(document.getElementById("sellerProfileName")?.value || "");
+    const sellerBio = sanitizeText(document.getElementById("sellerProfileBio")?.value || "");
     const sellerImage = document.getElementById("sellerProfileImage")?.value || "";
 
     try{
@@ -1305,7 +1543,6 @@ function loadSellerProductsForCurrentUser(){
     });
 
 }
-
 async function deleteProduct(productId){
 
     const user = auth.currentUser;
@@ -1428,10 +1665,13 @@ async function promoteProduct(productId){
 
 }
 /* ==================================
-CHAT SYSTEM (privacy-filtered)
+APP MARKETPLACE
 ================================== */
 
-function openChat(itemId, sellerId){
+// One-time listing fee. Priced in Naira.
+const APP_LISTING_FEE = 10000;
+
+function postApp(){
 
     const user = auth.currentUser;
 
@@ -1440,274 +1680,120 @@ function openChat(itemId, sellerId){
         return;
     }
 
-    currentChatId = itemId + "_" + sellerId;
+    const appName = sanitizeText(document.getElementById("appName").value);
+    const developerName = sanitizeText(document.getElementById("developerName").value);
+    const category = sanitizeText(document.getElementById("appCategory").value);
+    const price = document.getElementById("appPrice").value.trim();
+    const appLink = document.getElementById("appLink").value.trim();
+    const appImage = document.getElementById("appImage").value.trim();
+    const description = sanitizeText(document.getElementById("appDescription").value);
 
-    showPage("chatPage");
-    loadMessages();
-
-}
-
-/* ==================================
-CHAT MESSAGE FILTER
-Blocks phone numbers, WhatsApp links,
-Telegram handles, and email addresses
-to prevent off-platform transactions
-================================== */
-
-function validateChatMessage(message){
-
-    const blockedPatterns = [
-        /\+?[0-9]{7,}/,                                            // Phone numbers
-        /wa\.me/i,                                                 // WhatsApp links
-        /whatsapp\.com/i,                                          // WhatsApp web
-        /telegram\.me/i,                                           // Telegram
-        /(?<![a-zA-Z])t\.me(?![a-zA-Z])/i,                        // Telegram short link
-        /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/      // Email addresses
-    ];
-
-    for(let pattern of blockedPatterns){
-        if(pattern.test(message)){
-            return false;
-        }
-    }
-
-    return true;
-
-}
-
-function sendMessage(){
-
-    const input = document.getElementById("chatInput");
-    const user = auth.currentUser;
-
-    if(!input || !user) return;
-
-    const message = input.value.trim();
-    if(!message) return;
-
-    // BLOCK external contact info - protect platform transactions
-    if(!validateChatMessage(message)){
-        alert("⚠️ External contact information is not allowed. Keep all communication and payments inside Karmas Market to stay protected.");
+    if(!appName || !developerName || !category || !price || !appLink || !appImage || !description){
+        alert("Please complete all fields");
         return;
     }
 
-    if(!currentChatId){
-        currentChatId = "general";
-    }
+    // Show the fee clearly before charging, so nothing feels like a surprise.
+    const confirmed = confirm(
+        `Listing your app costs a one-time fee of ₦${APP_LISTING_FEE}. ` +
+        `You'll also earn 85% of every sale (Karmas Market keeps 15%). Continue to payment?`
+    );
+    if(!confirmed) return;
 
-    db.collection("messages").add({
+    FlutterwaveCheckout({
 
-        chatId: currentChatId,
-        sender: user.email,
-        message: message,
-        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        public_key: "FLWPUBK-10783948c6fa8ead4ce8e667a24a3d51-X",
+        tx_ref: "APPLIST-" + Date.now(),
+        amount: APP_LISTING_FEE,
+        currency: "NGN",
+        payment_options: "card,banktransfer,ussd",
 
-    });
+        customer:{ email:user.email, name:user.email },
 
-    db.collection("conversations").doc(currentChatId).set({
+        customizations:{
+            title: "Karmas Market",
+            description: "App listing fee — " + appName
+        },
 
-        chatId: currentChatId,
-        lastMessage: message,
-        sender: user.email,
-        participants: firebase.firestore.FieldValue.arrayUnion(user.email),
-        updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+        callback:function(response){
 
-    }, { merge:true });
+            db.collection("apps").add({
 
-    input.value = "";
-
-}
-
-function loadMessages(){
-
-    const box = document.getElementById("chatMessages");
-    if(!box) return;
-
-    db.collection("messages")
-    .where("chatId", "==", currentChatId)
-    .orderBy("createdAt", "asc")
-    .onSnapshot(snapshot=>{
-
-        box.innerHTML = "";
-
-        snapshot.forEach(doc=>{
-
-            const chat = doc.data();
-
-            box.innerHTML += `
-            <div style="background:#1a1a1a; padding:12px; margin-bottom:10px; border-radius:12px;">
-                <b style="color:gold;">${chat.sender}</b>
-                <p style="margin-top:5px;">${chat.message}</p>
-            </div>
-            `;
-
-        });
-
-        box.scrollTop = box.scrollHeight;
-
-    });
-
-}
-
-function loadConversations(){
-
-    const user = auth.currentUser;
-    if(!user) return;
-
-    const list = document.getElementById("conversationList");
-    if(!list) return;
-
-    db.collection("conversations")
-    .where("participants", "array-contains", user.email)
-    .orderBy("updatedAt", "desc")
-    .onSnapshot(snapshot=>{
-
-        list.innerHTML = "";
-
-        snapshot.forEach(doc=>{
-
-            const chat = doc.data();
-
-            list.innerHTML += `
-            <div onclick="currentChatId='${chat.chatId}'; showPage('chatPage'); loadMessages();"
-                 style="background:#111; padding:15px; margin-bottom:10px; border-radius:12px; border:1px solid rgba(255,215,0,.15); cursor:pointer;">
-                <h3 style="color:gold;">${chat.sender}</h3>
-                <p class="small">${chat.lastMessage}</p>
-            </div>
-            `;
-
-        });
-
-    });
-
-}
-
-document.addEventListener("DOMContentLoaded", ()=>{
-
-    const input = document.getElementById("chatInput");
-
-    if(input){
-        input.addEventListener("keypress", function(event){
-            if(event.key === "Enter"){
-                sendMessage();
-            }
-        });
-    }
-
-});
-/* ==================================
-WALLET SYSTEM
-================================== */
-
-function loadWallet(){
-
-    const user = auth.currentUser;
-    if(!user) return;
-
-    db.collection("wallets").doc(user.uid)
-    .onSnapshot(doc=>{
-
-        const walletBalance = document.getElementById("walletBalance");
-        if(!walletBalance) return;
-
-        if(doc.exists){
-            const wallet = doc.data();
-            walletBalance.innerText = "₦" + (wallet.balance || 0);
-        }else{
-            db.collection("wallets").doc(user.uid).set({
-                balance:0,
+                appName,
+                developerName,
+                developerEmail: user.email,
+                category,
+                price,
+                appLink,
+                appImage,
+                description,
+                featured:false,
+                downloads:0,
+                totalEarnings:0,
+                listingFeePaid: APP_LISTING_FEE,
+                paymentReference: response.tx_ref,
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
+
+            })
+            .then(()=>{
+                addAppCommission(APP_LISTING_FEE);
+                sendAppNotification(appName);
+                alert("Payment successful. Application Posted Successfully");
+                clearAppForm();
+            })
+            .catch(error=>{
+                console.log(error);
+                alert(error.message);
             });
+
+        },
+
+        onclose:function(){
+            console.log("App listing payment window closed");
         }
 
     });
 
 }
 
-function addWalletBalance(userId, amount){
+function clearAppForm(){
 
-    return db.collection("wallets").doc(userId).set({
-        balance: firebase.firestore.FieldValue.increment(Number(amount))
-    }, { merge:true });
-
-}
-
-function deductWalletBalance(userId, amount){
-
-    return db.collection("wallets").doc(userId).set({
-        balance: firebase.firestore.FieldValue.increment(-Number(amount))
-    }, { merge:true });
+    document.getElementById("appName").value = "";
+    document.getElementById("developerName").value = "";
+    document.getElementById("appCategory").value = "";
+    document.getElementById("appPrice").value = "";
+    document.getElementById("appLink").value = "";
+    document.getElementById("appImage").value = "";
+    document.getElementById("appDescription").value = "";
 
 }
 
-/* ==================================
-SELLER PROFILE SYSTEM
-================================== */
+function loadApps(){
 
-function openSellerProfile(sellerName){
-    showPage("sellerProfilePage");
-    loadSellerProfile(sellerName);
-    loadSellerProducts(sellerName);
-}
+    const appFeed = document.getElementById("appFeed");
+    if(!appFeed) return;
 
-function loadSellerProfile(sellerName){
-
-    const container = document.getElementById("sellerProfile");
-    if(!container) return;
-
-    db.collection("sellers")
-    .where("name", "==", sellerName)
-    .get()
-    .then(snapshot=>{
-
-        container.innerHTML = "";
-
-        if(snapshot.empty){
-            container.innerHTML = `<div class="profile-box"><h2>Seller Not Found</h2></div>`;
-            return;
-        }
-
-        snapshot.forEach(doc=>{
-
-            const seller = doc.data();
-
-            container.innerHTML = `
-            <div class="profile-box">
-                <img src="${seller.image || 'https://via.placeholder.com/150'}"
-                     style="width:120px; height:120px; border-radius:50%; object-fit:cover; margin-bottom:15px;">
-                <h2>${seller.name}</h2>
-                <p class="small">${seller.bio || ""}</p>
-                <p class="small">${seller.email || ""}</p>
-            </div>
-            `;
-
-        });
-
-    });
-
-}
-
-function loadSellerProducts(sellerName){
-
-    const container = document.getElementById("sellerProducts");
-    if(!container) return;
-
-    db.collection("items")
-    .where("seller", "==", sellerName)
+    db.collection("apps")
+    .orderBy("createdAt", "desc")
     .onSnapshot(snapshot=>{
 
-        container.innerHTML = "";
+        appFeed.innerHTML = "";
 
         snapshot.forEach(doc=>{
 
-            const item = doc.data();
+            const app = doc.data();
 
-            container.innerHTML += `
+            appFeed.innerHTML += `
             <div class="card">
-                <img src="${item.imageUrl}">
+                <img src="${app.appImage}" alt="${app.appName}">
                 <div class="card-body">
-                    <h3>${item.title}</h3>
-                    <p class="price">₦${item.price}</p>
+                    <h3>${app.appName}</h3>
+                    <p class="small">Developer: ${app.developerName}</p>
+                    <p class="small">Category: ${app.category}</p>
+                    <p class="small">${app.description}</p>
+                    <p class="price">₦${app.price}</p>
+                    ${app.featured ? `<p style="color:gold; font-weight:bold;">⭐ Featured App</p>` : ""}
+                    <button onclick="downloadApp('${doc.id}', '${app.appLink}')">Download App</button>
                 </div>
             </div>
             `;
@@ -1718,7 +1804,112 @@ function loadSellerProducts(sellerName){
 
 }
 
-async function createSellerProfile(){
+function downloadApp(appId, appLink){
+
+    db.collection("apps").doc(appId).update({
+        downloads: firebase.firestore.FieldValue.increment(1)
+    })
+    .then(()=>{
+        window.open(appLink, "_blank");
+    })
+    .catch(error=>{
+        console.log(error);
+    });
+
+}
+
+async function featureApp(appId){
+    if(!requireAdmin()) return;
+
+    try{
+        await db.collection("apps").doc(appId).update({ featured:true });
+        alert("App featured");
+    }catch(error){
+        console.log(error);
+        alert(error.message);
+    }
+
+}
+
+async function unfeatureApp(appId){
+    if(!requireAdmin()) return;
+
+    try{
+        await db.collection("apps").doc(appId).update({ featured:false });
+        alert("Featured status removed");
+    }catch(error){
+        console.log(error);
+        alert(error.message);
+    }
+
+}
+
+async function deleteApp(appId){
+    if(!requireAdmin()) return;
+
+    try{
+        await db.collection("apps").doc(appId).delete();
+        alert("App deleted");
+    }catch(error){
+        console.log(error);
+        alert(error.message);
+    }
+
+}
+
+function loadFeaturedApps(){
+
+    const container = document.getElementById("featuredApps");
+    if(!container) return;
+
+    db.collection("apps")
+    .where("featured", "==", true)
+    .onSnapshot(snapshot=>{
+
+        container.innerHTML = "";
+
+        snapshot.forEach(doc=>{
+
+            const app = doc.data();
+
+            container.innerHTML += `
+            <div class="card">
+                <img src="${app.appImage}">
+                <div class="card-body">
+                    <h3>⭐ ${app.appName}</h3>
+                    <p class="small">${app.description}</p>
+                    <button onclick="downloadApp('${doc.id}', '${app.appLink}')">Download</button>
+                </div>
+            </div>
+            `;
+
+        });
+
+    });
+
+}
+/* ==================================
+AFFILIATE / SPONSORED ADS
+================================== */
+/* ==================================
+AD PRICING TIERS
+(Standard ads: ₦2,500–₦10,000, chosen
+by the user based on desired visibility.
+Premium/top-of-search ads are a separate,
+later feature — not wired here yet.)
+================================== */
+
+const AD_PRICE_TIERS = {
+    basic:    2500,
+    standard: 5000,
+    featured: 10000
+};
+
+function getAdPrice(tier){
+    return AD_PRICE_TIERS[tier] || AD_PRICE_TIERS.basic;
+}
+
+async function submitPromotion(){
 
     const user = auth.currentUser;
 
@@ -1727,94 +1918,136 @@ async function createSellerProfile(){
         return;
     }
 
-    const sellerName = document.getElementById("sellerProfileName")?.value || "";
-    const sellerBio = document.getElementById("sellerProfileBio")?.value || "";
-    const sellerImage = document.getElementById("sellerProfileImage")?.value || "";
+    const title = sanitizeText(document.getElementById("promoTitle").value);
+    const description = sanitizeText(document.getElementById("promoDescription").value);
+    const link = document.getElementById("promoLink").value.trim();
+    const type = document.getElementById("affiliateType").value;
+    const file = document.getElementById("affiliateImage").files[0];
 
-    try{
+    // Which pricing tier the user picked in the ad form.
+    // Expects a <select id="adPricingTier"> with values: basic / standard / featured
+    const tierSelect = document.getElementById("adPricingTier");
+    const tier = tierSelect ? tierSelect.value : "basic";
+    const adPrice = getAdPrice(tier);
 
-        await db.collection("sellers").doc(user.uid).set({
-
-            uid: user.uid,
-            email: user.email,
-            name: sellerName,
-            bio: sellerBio,
-            image: sellerImage,
-            verified:false,
-            sponsored:false,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
-
-        });
-
-        alert("Seller profile created");
-
-    }catch(error){
-        console.log(error);
-        alert(error.message);
+    if(!title || !description || !link || !file){
+        alert("Please complete all fields");
+        return;
     }
 
-}
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+    const maxSizeBytes = 8 * 1024 * 1024;
 
-function loadCurrentSellerProfile(){
+    if(!allowedTypes.includes(file.type)){
+        alert("Please upload a JPG, PNG, WEBP or GIF image.");
+        return;
+    }
 
-    const user = auth.currentUser;
-    if(!user) return;
+    if(file.size > maxSizeBytes){
+        alert("Image is too large. Please upload an image under 8MB.");
+        return;
+    }
 
-    db.collection("sellers").doc(user.uid).get()
-    .then(doc=>{
+    // Show the fee clearly before charging so nothing feels like a surprise.
+    const confirmed = confirm(
+        `Posting this ad (${tier} tier) costs ₦${adPrice}. Continue to payment?`
+    );
+    if(!confirmed) return;
 
-        if(!doc.exists) return;
+    FlutterwaveCheckout({
 
-        const seller = doc.data();
-        const box = document.getElementById("sellerProfileInfo");
-        if(!box) return;
+        public_key: "FLWPUBK-10783948c6fa8ead4ce8e667a24a3d51-X",
+        tx_ref: "AD-" + Date.now(),
+        amount: adPrice,
+        currency: "NGN",
+        payment_options: "card,banktransfer,ussd",
 
-        box.innerHTML = `
-        <div class="profile-box">
-            <img src="${seller.image || ''}" style="width:100px; height:100px; border-radius:50%; object-fit:cover;">
-            <h2>${seller.name || ""}</h2>
-            <p>${seller.bio || ""}</p>
-            <p>${seller.email || ""}</p>
-        </div>
-        `;
+        customer:{ email:user.email, name:user.email },
+
+        customizations:{
+            title: "Karmas Market",
+            description: "Advertisement posting — " + tier + " tier"
+        },
+
+        callback: async function(response){
+
+            try{
+
+                const formData = new FormData();
+                formData.append("file", file);
+                formData.append("upload_preset", "karmas.ng");
+
+                const uploadResponse = await fetch(
+                    "https://api.cloudinary.com/v1_1/djrijnh6c/image/upload",
+                    { method:"POST", body:formData }
+                );
+
+                const data = await uploadResponse.json();
+                const imageUrl = data.secure_url;
+
+                await db.collection("affiliateAds").add({
+
+                    title,
+                    description,
+                    link,
+                    type,
+                    tier,
+                    pricePaid: adPrice,
+                    image: imageUrl,
+                    postedBy: user.email,
+                    paymentReference: response.tx_ref,
+                    clicks:0,
+                    impressions:0,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+
+                });
+
+                addAppCommission(adPrice);
+
+                alert("Payment successful. Affiliate Ad Posted");
+                sendPromotionNotification(title);
+                loadAffiliateAds();
+
+            }catch(error){
+                console.log(error);
+                alert(error.message);
+            }
+
+        },
+
+        onclose:function(){
+            console.log("Ad payment window closed");
+        }
 
     });
 
 }
 
-function openSellerDashboard(){
-    showPage("sellerDashboard");
-    loadSellerStats();
-    loadSellerProductsForCurrentUser();
-    loadSellerSubscription();
-    loadSellerSales();
-}
+function loadAffiliateAds(){
 
-function loadSellerProductsForCurrentUser(){
+    const feed = document.getElementById("affiliateFeed");
+    if(!feed) return;
 
-    const user = auth.currentUser;
-    if(!user) return;
-
-    const container = document.getElementById("sellerProductsFeed");
-    if(!container) return;
-
-    db.collection("items")
-    .where("sellerEmail", "==", user.email)
+    db.collection("affiliateAds")
+    .orderBy("createdAt", "desc")
     .onSnapshot(snapshot=>{
 
-        container.innerHTML = "";
+        feed.innerHTML = "";
 
         snapshot.forEach(doc=>{
 
-            const item = doc.data();
+            const ad = doc.data();
 
-            container.innerHTML += `
+            trackAdImpression(doc.id);
+
+            feed.innerHTML += `
             <div class="card">
-                <img src="${item.imageUrl}">
+                <img src="${ad.image}">
                 <div class="card-body">
-                    <h3>${item.title}</h3>
-                    <p class="price">₦${item.price}</p>
-                    <button onclick="deleteProduct('${doc.id}')">Delete</button>
+                    <h3>${ad.title}</h3>
+                    <p class="small">${ad.description}</p>
+                    <p class="price">${ad.type}</p>
+                    <button onclick="openAffiliateLink('${doc.id}', '${ad.link}')">View Deal</button>
                 </div>
             </div>
             `;
@@ -1825,103 +2058,115 @@ function loadSellerProductsForCurrentUser(){
 
 }
 
-async function deleteProduct(productId){
+function trackAdImpression(adId){
 
-    const user = auth.currentUser;
-    if(!user) return;
+    db.collection("affiliateAds").doc(adId).update({
+        impressions: firebase.firestore.FieldValue.increment(1)
+    }).catch(()=>{});
 
-    const confirmDelete = confirm("Delete this product?");
-    if(!confirmDelete) return;
+}
+
+async function openAffiliateLink(id, link){
 
     try{
 
-        const doc = await db.collection("items").doc(productId).get();
+        await db.collection("affiliateAds").doc(id).update({
+            clicks: firebase.firestore.FieldValue.increment(1)
+        });
 
-        if(doc.exists && doc.data().sellerEmail !== user.email && !isAdmin()){
-            alert("You can only delete your own products.");
-            return;
-        }
-
-        await db.collection("items").doc(productId).delete();
-        alert("Product deleted");
+        window.open(link, "_blank");
 
     }catch(error){
         console.log(error);
-        alert(error.message);
     }
 
 }
 
-function loadSellerStats(){
+function loadSponsoredAds(){
 
-    const user = auth.currentUser;
-    if(!user) return;
+    const feed = document.getElementById("sponsoredAdsFeed");
+    if(!feed) return;
 
-    db.collection("items")
-    .where("sellerEmail", "==", user.email)
-    .get()
-    .then(snapshot=>{
+    db.collection("affiliateAds")
+    .orderBy("clicks", "desc")
+    .limit(5)
+    .onSnapshot(snapshot=>{
 
-        const totalProducts = document.getElementById("sellerTotalProducts");
-        if(totalProducts){
-            totalProducts.innerText = snapshot.size;
-        }
-
-    });
-
-}
-
-function loadSellerSubscription(){
-
-    const user = auth.currentUser;
-    if(!user) return;
-
-    const box = document.getElementById("sellerSubscriptionStatus");
-    if(!box) return;
-
-    db.collection("subscriptions")
-    .where("email", "==", user.email)
-    .get()
-    .then(snapshot=>{
-
-        box.innerHTML = snapshot.empty ? "Free Plan" : "Premium Seller";
-
-    });
-
-}
-
-function loadSellerSales(){
-
-    const user = auth.currentUser;
-    if(!user) return;
-
-    db.collection("orders")
-    .where("sellerEmail", "==", user.email)
-    .get()
-    .then(snapshot=>{
-
-        let sales = 0;
+        feed.innerHTML = "";
 
         snapshot.forEach(doc=>{
-            const order = doc.data();
-            sales += Number(order.totalPaid || 0);
-        });
 
-        const salesBox = document.getElementById("sellerSales");
-        if(salesBox){
-            salesBox.innerText = "₦" + sales;
-        }
+            const ad = doc.data();
+
+            feed.innerHTML += `
+            <div class="card">
+                <img src="${ad.image}">
+                <div class="card-body">
+                    <h3 style="color:gold;">⭐ Sponsored</h3>
+                    <h4>${ad.title}</h4>
+                    <p class="small">${ad.description}</p>
+                    <button onclick="openAffiliateLink('${doc.id}', '${ad.link}')">View Offer</button>
+                </div>
+            </div>
+            `;
+
+        });
 
     });
 
 }
 
-async function featureProduct(productId){
+function loadAffiliateStats(){
+
+    const clicksEl = document.getElementById("affiliateClicks");
+    const impressionsEl = document.getElementById("affiliateImpressions");
+
+    db.collection("affiliateAds").onSnapshot(snapshot=>{
+
+        let totalClicks = 0;
+        let totalImpressions = 0;
+
+        snapshot.forEach(doc=>{
+            const ad = doc.data();
+            totalClicks += Number(ad.clicks || 0);
+            totalImpressions += Number(ad.impressions || 0);
+        });
+
+        if(clicksEl) clicksEl.innerText = totalClicks;
+        if(impressionsEl) impressionsEl.innerText = totalImpressions;
+
+    });
+
+}
+
+/* Admin-created sponsored ads (separate, direct-sold ad slots) */
+
+async function createSponsoredAd(){
+    if(!requireAdmin()) return;
+
+    const title = sanitizeText(document.getElementById("adTitle")?.value);
+    const description = sanitizeText(document.getElementById("adDescription")?.value);
+    const image = document.getElementById("adImage")?.value;
+    const link = document.getElementById("adLink")?.value;
+
+    if(!title || !description || !image || !link){
+        alert("Fill all fields");
+        return;
+    }
 
     try{
 
-        await db.collection("items").doc(productId).update({ featured:true });
-        alert("Product featured");
+        await db.collection("sponsoredAds").add({
+
+            title, description, image, link,
+            clicks:0,
+            impressions:0,
+            active:true,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+
+        });
+
+        alert("Advertisement created");
 
     }catch(error){
         console.log(error);
@@ -1930,20 +2175,90 @@ async function featureProduct(productId){
 
 }
 
-async function promoteProduct(productId){
+function loadFeaturedAds(){
+
+    const container = document.getElementById("featuredAdsFeed");
+    if(!container) return;
+
+    db.collection("sponsoredAds")
+    .where("active", "==", true)
+    .onSnapshot(snapshot=>{
+
+        container.innerHTML = "";
+
+        snapshot.forEach(doc=>{
+
+            const ad = doc.data();
+
+            db.collection("sponsoredAds").doc(doc.id).update({
+                impressions: firebase.firestore.FieldValue.increment(1)
+            });
+
+            container.innerHTML += `
+            <div class="card">
+                <img src="${ad.image}">
+                <div class="card-body">
+                    <h3>${ad.title}</h3>
+                    <p>${ad.description}</p>
+                    <button onclick="openSponsoredAd('${doc.id}', '${ad.link}')">View Offer</button>
+                </div>
+            </div>
+            `;
+
+        });
+
+    });
+
+}
+
+async function openSponsoredAd(adId, link){
 
     try{
 
-        await db.collection("items").doc(productId).update({
-            featured:true,
-            promoted:true
+        await db.collection("sponsoredAds").doc(adId).update({
+            clicks: firebase.firestore.FieldValue.increment(1)
         });
 
-        alert("Product promoted");
+        window.open(link, "_blank");
 
     }catch(error){
         console.log(error);
     }
+
+}
+
+function payForAdvertisement(tier){
+
+    const user = auth.currentUser;
+
+    if(!user){
+        alert("Login required");
+        return;
+    }
+
+    // Tiered ad pricing (₦2,500–₦10,000). Pass a tier price in from the UI.
+    const amount = Number(tier) || 2500;
+
+    FlutterwaveCheckout({
+
+        public_key: "FLWPUBK-10783948c6fa8ead4ce8e667a24a3d51-X",
+        tx_ref: "AD-" + Date.now(),
+        amount: amount,
+        currency: "NGN",
+
+        customer:{ email:user.email, name:user.email },
+
+        customizations:{
+            title: "Advertisement Payment",
+            description: "Featured Advertisement"
+        },
+
+        callback:function(){
+            addAppCommission(amount);
+            alert("Advertisement payment successful. You can now submit your ad.");
+        }
+
+    });
 
 }
 /* ==================================
@@ -1994,7 +2309,7 @@ function openLogoMaker(){
 
 function generateLogo(){
 
-    const text = document.getElementById("logoText").value;
+    const text = sanitizeText(document.getElementById("logoText").value);
 
     document.getElementById("logoPreview").innerHTML = `
     <div style="font-size:48px; font-weight:bold; color:gold; padding:20px;">
@@ -2020,8 +2335,8 @@ function generateAIContent(){
 
 function createAdText(){
 
-    const name = document.getElementById("businessName").value;
-    const info = document.getElementById("businessInfo").value;
+    const name = sanitizeText(document.getElementById("businessName").value);
+    const info = sanitizeText(document.getElementById("businessInfo").value);
 
     document.getElementById("generatedAd").innerHTML = `
     <div class="card">
@@ -2123,9 +2438,9 @@ CONTACT FORM
 
 function submitContact(){
 
-    const name = document.getElementById("contactName").value.trim();
+    const name = sanitizeText(document.getElementById("contactName").value);
     const email = document.getElementById("contactEmail").value.trim();
-    const message = document.getElementById("contactMessage").value.trim();
+    const message = sanitizeText(document.getElementById("contactMessage").value);
     const result = document.getElementById("contactResult");
 
     if(!name || !email || !message){
@@ -2279,7 +2594,6 @@ async function adminDeleteProduct(productId){
     }
 
 }
-
 /* ==================================
 ADMIN — APPS
 ================================== */
@@ -2657,7 +2971,11 @@ function loadBankList(){
     })
     .catch(error => {
         console.error('Error loading banks:', error);
-        alert('Could not load bank list. Please try again.');
+        if(!navigator.onLine){
+            alert('You appear to be offline. Please check your connection and try again.');
+        }else{
+            alert('Could not load bank list. Please try again.');
+        }
     });
 
 }
@@ -2669,8 +2987,8 @@ function requestWithdrawal(){
 
     const amount = Number(document.getElementById("withdrawAmount").value);
     const bankCode = document.getElementById("bankSelect").value;
-    const accountNumber = document.getElementById("accountNumber").value;
-    const accountName = document.getElementById("accountName").value;
+    const accountNumber = document.getElementById("accountNumber").value.trim();
+    const accountName = sanitizeText(document.getElementById("accountName").value);
 
     if(!amount || amount < 1000){
         alert("Minimum withdrawal is ₦1,000");
@@ -2684,6 +3002,11 @@ function requestWithdrawal(){
 
     if(accountNumber.length !== 10){
         alert("Account number must be exactly 10 digits");
+        return;
+    }
+
+    if(!navigator.onLine){
+        alert("You're offline. Please check your connection and try again.");
         return;
     }
 
@@ -2761,6 +3084,11 @@ function requestWithdrawal(){
 
 }
 
+/* Renders into the shared .transaction /
+   .transaction-info / .transaction-amount classes from
+   style.css Section G instead of ad-hoc inline styles.
+   Same data, same query, same 20-item limit — only the
+   markup changed. */
 function loadWithdrawalHistory(){
 
     const user = auth.currentUser;
@@ -2778,29 +3106,30 @@ function loadWithdrawalHistory(){
         historyBox.innerHTML = "";
 
         if(snapshot.empty){
-            historyBox.innerHTML = "<p style='text-align:center; color:#888;'>No withdrawals yet</p>";
+            historyBox.innerHTML = "<p class='small' style='text-align:center; padding:20px;'>No withdrawals yet</p>";
             return;
         }
 
         snapshot.forEach(doc => {
+
             const w = doc.data();
             const status = w.status === 'completed' ? '✅' : w.status === 'failed' ? '❌' : '⏳';
             const date = w.createdAt ? new Date(w.createdAt.toDate()).toLocaleDateString() : 'N/A';
+            const amountClass = w.status === 'failed' ? 'amount-negative' : 'amount-positive';
 
             historyBox.innerHTML += `
-                <div style="background:#1a1a1a; padding:12px; margin-bottom:8px; border-radius:8px; border-left:4px solid ${w.status === 'completed' ? '#4caf50' : w.status === 'failed' ? '#f44336' : '#ff9800'};">
-                    <div style="display:flex; justify-content:space-between;">
-                        <div>
-                            <p style="margin:0; font-weight:bold;">₦${w.amount.toLocaleString()}</p>
-                            <p style="margin:5px 0 0 0; font-size:12px; color:#aaa;">${w.accountName} • ${date}</p>
-                        </div>
-                        <div style="text-align:right;">
-                            <p style="margin:0; font-size:18px;">${status}</p>
-                            <p style="margin:5px 0 0 0; font-size:11px; color:#aaa;">${w.status}</p>
-                        </div>
+                <div class="transaction">
+                    <div class="transaction-info">
+                        <div class="transaction-title">₦${w.amount.toLocaleString()}</div>
+                        <div class="transaction-date">${w.accountName} • ${date}</div>
+                    </div>
+                    <div style="text-align:right;">
+                        <div class="transaction-amount ${amountClass}">${status}</div>
+                        <div class="transaction-date">${w.status}</div>
                     </div>
                 </div>
             `;
+
         });
 
     });
@@ -2872,6 +3201,16 @@ window.addEventListener("load", async function(){
         }
 
     }, 1500);
+
+    // Let the user know when connectivity drops or comes back,
+    // instead of leaving silent failures on flaky mobile networks.
+    window.addEventListener("online", ()=>{
+        console.log("Back online");
+    });
+
+    window.addEventListener("offline", ()=>{
+        showNotificationPopup("Connection Lost", "You're currently offline. Some features may not work until you reconnect.");
+    });
 
 });
 
