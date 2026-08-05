@@ -322,6 +322,7 @@ header h1{ font-size:24px; }
     </div>
   </div>
 </header>
+
 <!-- PRODUCTS PAGE -->
 <section id="products" class="page active">
   <h2 class="page-title">Marketplace</h2>
@@ -333,7 +334,7 @@ header h1{ font-size:24px; }
     <input id="itemPrice" type="number" placeholder="Price">
     <textarea id="itemDescription" placeholder="Description"></textarea>
     <input id="itemImageFile" type="file" accept="image/*">
-    <button onclick="postItem()">Post Product</button>
+    <button id="postItemBtn" onclick="postItem()">Post Product</button>
   </div>
   <div id="itemFeed" class="grid"></div>
 
@@ -442,7 +443,6 @@ header h1{ font-size:24px; }
     <button onclick="submitPromotion()">Submit Promotion</button>
   </div>
 </section>
-
 <!-- AFFILIATE MARKETPLACE -->
 <section id="affiliateMarketplace" class="page">
   <h2 class="page-title">Affiliate Deals</h2>
@@ -480,30 +480,30 @@ header h1{ font-size:24px; }
 </section>
 
 <!-- =====================================================
-     CHAT PAGE  — REDESIGNED
-     Uses existing style.css Section F classes:
-     .chat-window / .chat-header / .chat-user-avatar /
+     CHAT PAGE — FACEBOOK / MESSENGER MOBILE STYLE
+     Single full-screen conversation (list lives on
+     conversationsPage — tap a chat there to land here).
+     Uses .chat-window / .chat-header / .chat-user-avatar /
      .messages / .message.sent / .message.received /
-     .chat-input / .chat-send-btn
-     IDs kept identical (chatMessages, chatInput) so
-     app.js needs only its render logic updated, not
-     its element lookups.
+     .chat-input / .chat-send-btn from style.css Section F.
 ===================================================== -->
 <section id="chatPage" class="page">
 
-  <div class="chat-window" style="max-width:900px; margin:10px auto 0;">
+  <div class="chat-window" style="max-width:900px; margin:10px auto 0; min-height:80vh;">
 
     <div class="chat-header">
       <button onclick="showPage('conversationsPage')" style="width:auto; padding:8px 16px; margin:0;">←</button>
       <img class="chat-user-avatar" id="chatHeaderAvatar"
-           src="https://api.dicebear.com/7.x/initials/svg?seed=Seller" alt="">
+           src="https://api.dicebear.com/7.x/initials/svg?seed=Seller" alt="Avatar">
       <div class="chat-user-info">
         <h3 id="chatHeaderName">Seller</h3>
         <span class="chat-user-status online" id="chatHeaderStatus">● Active</span>
       </div>
     </div>
 
-    <div id="chatMessages" class="messages"></div>
+    <div id="chatMessages" class="messages">
+      <p style="color:#94a3b8; text-align:center; padding:20px;">Start a conversation</p>
+    </div>
 
     <div class="chat-input">
       <input id="chatInput" type="text" placeholder="Type a message...">
@@ -515,17 +515,20 @@ header h1{ font-size:24px; }
 </section>
 
 <!-- =====================================================
-     CONVERSATIONS PAGE — REDESIGNED
-     Uses .conversation-list / .conversation-item /
-     .conversation-avatar / .conversation-info
-     conversationList ID unchanged so app.js's
-     document.getElementById("conversationList") still works.
+     CONVERSATIONS PAGE — FACEBOOK / MESSENGER STYLE
+     Full chat list. Tapping a conversation-item calls
+     openConversation() (app.js) which switches to chatPage.
+     Uses .conversation-list / .conversation-header /
+     .conversation-item / .conversation-avatar /
+     .conversation-info from style.css Section F.
 ===================================================== -->
 <section id="conversationsPage" class="page">
 
+  <h2 class="page-title">Messages</h2>
+
   <div class="conversation-list" style="max-width:900px; margin:0 auto;">
     <div class="conversation-header">
-      <h2>Chats</h2>
+      <h2>Active Chats</h2>
     </div>
     <div id="conversationList"></div>
   </div>
@@ -537,7 +540,8 @@ header h1{ font-size:24px; }
   <h2 class="page-title">Notifications</h2>
   <div id="notificationFeed" style="display:flex; flex-direction:column; gap:15px;"></div>
 </section>
-!-- =====================================================
+
+<!-- =====================================================
      ORDERS PAGE — REDESIGNED
      ordersFeed ID unchanged; app.js's loadOrders() now
      renders styled status badges instead of plain text.
@@ -650,7 +654,6 @@ header h1{ font-size:24px; }
     <button onclick="logout()" class="alt">Logout</button>
   </div>
 </section>
-
 <!-- =====================
      POLICY PAGES
 ===================== -->
@@ -694,6 +697,7 @@ header h1{ font-size:24px; }
     <div id="contactResult" style="margin-top:10px; color:gold; font-size:13px;"></div>
   </div>
 </section>
+
 <!-- PRIVACY POLICY -->
 <section id="privacyPage" class="page">
   <h2 class="page-title">Privacy Policy</h2>
@@ -828,7 +832,6 @@ header h1{ font-size:24px; }
     <p class="small">You are responsible for all content generated using our AI tools.</p>
   </div>
 </section>
-
 <!-- =====================
      FOOTER
 ===================== -->
@@ -887,6 +890,7 @@ header h1{ font-size:24px; }
   </p>
 
 </footer>
+
 <!-- BOTTOM NAVIGATION -->
 <div class="bottom-nav">
   <button class="nav-btn active" onclick="showPage('products',this)">Products</button>

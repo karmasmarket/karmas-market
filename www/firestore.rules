@@ -1,0 +1,174 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == "karmaking426@gmail.com";
+    }
+
+    function isOwnerByEmail(field) {
+      return isSignedIn() && request.auth.token.email == resource.data[field];
+    }
+
+    function isOwnerByUid() {
+      return isSignedIn() && request.auth.uid == resource.id;
+    }
+
+    // ---------- items (product listings) ----------
+    match /items/{itemId} {
+      allow read: if true; // public marketplace listing
+      allow create: if isSignedIn()
+                    && request.resource.data.sellerEmail == request.auth.token.email;
+      allow update, delete: if isOwnerByEmail('sellerEmail') || isAdmin();
+    }
+
+    // ---------- orders ----------
+    match /orders/{orderId} {
+      allow read: if isSignedIn() && (
+                    resource.data.buyer == request.auth.token.email ||
+                    resource.data.client == request.auth.token.email ||
+                    resource.data.sellerEmail == request.auth.token.email ||
+                    isAdmin()
+                  );
+      allow create: if isSignedIn();
+      allow update: if isSignedIn() && (
+                    resource.data.buyer == request.auth.token.email ||
+                    resource.data.client == request.auth.token.email ||
+                    resource.data.sellerEmail == request.auth.token.email ||
+                    isAdmin()
+                  );
+      allow delete: if isAdmin();
+    }
+
+    // ---------- wallets (doc id == uid) ----------
+    match /wallets/{userId} {
+      allow read: if isSignedIn() && request.auth.uid == userId;
+      allow write: if isSignedIn() && request.auth.uid == userId;
+    }
+
+    // ---------- withdrawals ----------
+    match /withdrawals/{withdrawalId} {
+      allow read: if isSignedIn() && (
+                    resource.data.userId == request.auth.uid || isAdmin()
+                  );
+      allow create: if isSignedIn()
+                    && request.resource.data.userId == request.auth.uid
+                    && request.resource.data.status == 'pending';
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------- conversations ----------
+    match /conversations/{chatId} {
+      allow read: if isSignedIn()
+                  && request.auth.token.email in resource.data.participants;
+      allow create: if isSignedIn()
+                    && request.auth.token.email in request.resource.data.participants;
+      allow update: if isSignedIn()
+                    && request.auth.token.email in resource.data.participants;
+      allow delete: if isAdmin();
+    }
+
+    // ---------- messages ----------
+    match /messages/{messageId} {
+      allow create: if isSignedIn()
+                    && request.resource.data.sender == request.auth.token.email;
+      allow read: if isSignedIn()
+                  && request.auth.token.email in
+                     get(/databases/$(database)/documents/conversations/$(resource.data.chatId)).data.participants;
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------- users ----------
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if (isSignedIn() && request.auth.uid == userId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- sellers (doc id == uid) ----------
+    match /sellers/{sellerId} {
+      allow read: if true; // public seller profile
+      allow create, update: if (isSignedIn() && request.auth.uid == sellerId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- freelancers ----------
+    // NOTE: verify this against your actual freelancer-profile creation
+    // code — confirm the doc id really is request.auth.uid before deploying.
+    match /freelancers/{freelancerId} {
+      allow read: if true; // public freelancer profile
+      allow create, update: if (isSignedIn() && request.auth.uid == freelancerId) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- reviews ----------
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+                    && request.resource.data.reviewer == request.auth.token.email;
+      allow update, delete: if isOwnerByEmail('reviewer') || isAdmin();
+    }
+
+    // ---------- apps (App Marketplace listings) ----------
+    match /apps/{appId} {
+      allow read: if true;
+      allow create: if isSignedIn()
+                    && request.resource.data.developerEmail == request.auth.token.email;
+      allow update, delete: if isOwnerByEmail('developerEmail') || isAdmin();
+    }
+
+    // ---------- notifications (global feed) ----------
+    match /notifications/{notificationId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // ---------- contact form submissions ----------
+    match /contactSubmissions/{submissionId} {
+      allow create: if true; // public contact form, no login required
+      allow read, update, delete: if isAdmin();
+    }
+
+    // ---------- admin-only collections ----------
+    match /admin/{docId} {
+      allow read, write: if isAdmin();
+    }
+
+    match /subscriptions/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /templates/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /sponsoredAds/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /affiliateAds/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ---------- audit logs (fraud/security trail) ----------
+    match /auditLogs/{logId} {
+      allow create: if isSignedIn()
+                    && request.resource.data.performedByUid == request.auth.uid;
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
+  }
+}

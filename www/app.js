@@ -37,6 +37,44 @@ function requireAdmin(){
 }
 
 /* ==================================
+AUDIT LOGGING
+Records fraud-relevant actions (admin
+moderation, listing deletions, escrow
+releases, withdrawals, logins) to a
+dedicated Firestore collection, so
+there's a permanent trail if something
+is ever disputed or investigated.
+This never blocks or fails the action
+it's logging — if writing the log
+itself fails, that failure is only
+logged to the console, not shown to
+the user.
+================================== */
+
+function logAuditEvent(action, details){
+
+    try{
+
+        const user = auth.currentUser;
+
+        db.collection("auditLogs").add({
+            action: action,
+            performedByEmail: user ? user.email : "system",
+            performedByUid: user ? user.uid : null,
+            isAdminAction: isAdmin(),
+            details: details || {},
+            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+        }).catch(error=>{
+            console.log("Audit log write failed:", error);
+        });
+
+    }catch(error){
+        console.log("Audit log error:", error);
+    }
+
+}
+
+/* ==================================
 COMMISSION ENGINE
 (Tiered structure — applies to both
 product sales and freelancer hires)
@@ -255,6 +293,7 @@ function login(){
     .then(()=>{
         settled = true;
         clearTimeout(timeoutId);
+        logAuditEvent("login", { email: email });
         window.location.href = "home.html";
     })
     .catch(error=>{
@@ -267,8 +306,13 @@ function login(){
 
 function logout(){
 
+    const loggingOutUser = auth.currentUser;
+
     auth.signOut()
     .then(()=>{
+        if(loggingOutUser){
+            logAuditEvent("logout", { email: loggingOutUser.email });
+        }
         window.location.href = "index.html";
     })
     .catch(error=>{
@@ -575,22 +619,76 @@ async function postItem(){
         return;
     }
 
+    const postBtn = document.getElementById("postItemBtn");
+    const setBtnState = (text, disabled)=>{
+        if(postBtn){ postBtn.textContent = text; postBtn.disabled = disabled; }
+    };
+
+    // Uploads to Cloudinary using XHR (not fetch) so we get real upload
+    // progress events, and wraps it with a 60s timeout — slow mobile
+    // networks in Nigeria/India need much more headroom than a typical
+    // fetch default. One automatic silent retry on network failure
+    // covers the common case of a single dropped packet/hiccup.
+    function uploadImage(file, attempt){
+        return new Promise((resolve, reject)=>{
+
+            const xhr = new XMLHttpRequest();
+            const formData = new FormData();
+            formData.append("file", file);
+            formData.append("upload_preset", "karmas.ng");
+
+            xhr.open("POST", "https://api.cloudinary.com/v1_1/djrijnh6c/image/upload");
+            xhr.timeout = 60000; // 60 seconds — was failing too early on slow connections
+
+            xhr.upload.onprogress = (e)=>{
+                if(e.lengthComputable){
+                    const pct = Math.round((e.loaded / e.total) * 100);
+                    setBtnState(`Uploading image... ${pct}%`, true);
+                }
+            };
+
+            xhr.onload = ()=>{
+                try{
+                    const data = JSON.parse(xhr.responseText);
+                    if(xhr.status >= 200 && xhr.status < 300 && data.secure_url){
+                        resolve(data);
+                    }else{
+                        reject(new Error("Image upload failed"));
+                    }
+                }catch(e){
+                    reject(new Error("Image upload failed"));
+                }
+            };
+
+            xhr.ontimeout = ()=> reject(new Error("TIMEOUT"));
+            xhr.onerror = ()=> reject(new Error("NETWORK"));
+
+            xhr.send(formData);
+
+        }).catch(err=>{
+            // One silent retry for network-type failures only (not for
+            // validation-type rejections), so a single bad moment on a
+            // weak connection doesn't force the user to redo the whole form.
+            if(attempt === 1 && (err.message === "TIMEOUT" || err.message === "NETWORK")){
+                setBtnState("Connection hiccup, retrying...", true);
+                return uploadImage(file, 2);
+            }
+            throw err;
+        });
+    }
+
     try{
 
-        const formData = new FormData();
-        formData.append("file", imageFile);
-        formData.append("upload_preset", "karmas.ng");
-
-        const response = await fetch(
-            "https://api.cloudinary.com/v1_1/djrijnh6c/image/upload",
-            { method:"POST", body:formData }
-        );
-
-        const data = await response.json();
-
-        if(!data.secure_url){
-            throw new Error("Image upload failed");
+        if(!navigator.onLine){
+            alert("You're offline. Please check your connection and try again.");
+            return;
         }
+
+        setBtnState("Uploading image... 0%", true);
+
+        const data = await uploadImage(imageFile, 1);
+
+        setBtnState("Saving product...", true);
 
         await db.collection("items").add({
 
@@ -620,9 +718,15 @@ async function postItem(){
         console.error(error);
         if(!navigator.onLine){
             alert("You're offline. Please check your connection and try again.");
+        }else if(error.message === "TIMEOUT"){
+            alert("Upload timed out — your connection may be too slow right now. Please try again, or try a smaller image.");
+        }else if(error.message === "NETWORK"){
+            alert("Network error during upload. Please check your connection and try again.");
         }else{
             alert(error.message);
         }
+    }finally{
+        setBtnState("Post Product", false);
     }
 
 }
@@ -638,9 +742,12 @@ function displayItems(){
 
         feed.innerHTML = "";
 
+        const currentUser = auth.currentUser;
+
         snapshot.forEach(doc=>{
 
             const item = doc.data();
+            const isOwner = currentUser && currentUser.email === item.sellerEmail;
 
             feed.innerHTML += `
             <div class="card">
@@ -661,6 +768,11 @@ function displayItems(){
                     <button class="alt" onclick="openChat('${doc.id}', '${item.seller}')">
                         Chat Seller
                     </button>
+                    ${isOwner ? `
+                    <button class="btn-danger" onclick="deleteItem('${doc.id}')">
+                        Delete Listing
+                    </button>
+                    ` : ""}
                 </div>
             </div>
             `;
@@ -668,6 +780,53 @@ function displayItems(){
         });
 
     });
+
+}
+
+// Deletes a product listing. Only shown/callable for the item's own seller —
+// the Firestore rule for the items collection should also check
+// request.auth.token.email == resource.data.sellerEmail server-side so this
+// can't be bypassed by calling the function directly from devtools.
+async function deleteItem(itemId){
+
+    const user = auth.currentUser;
+    if(!user){
+        alert("Please login first");
+        return;
+    }
+
+    const confirmed = confirm("Delete this listing? This cannot be undone.");
+    if(!confirmed) return;
+
+    try{
+
+        const docRef = db.collection("items").doc(itemId);
+        const docSnap = await docRef.get();
+
+        if(!docSnap.exists){
+            alert("This listing no longer exists.");
+            return;
+        }
+
+        const item = docSnap.data();
+
+        if(item.sellerEmail !== user.email){
+            alert("You can only delete your own listings.");
+            return;
+        }
+
+        await docRef.delete();
+        logAuditEvent("delete_listing", { itemId: itemId, title: item.title || "", sellerEmail: item.sellerEmail || "" });
+        alert("Listing deleted.");
+
+    }catch(error){
+        console.error(error);
+        if(!navigator.onLine){
+            alert("You're offline. Please check your connection and try again.");
+        }else{
+            alert("Failed to delete listing: " + error.message);
+        }
+    }
 
 }
 
@@ -1060,6 +1219,12 @@ function approveOrder(orderId){
 
             const label = order.freelancerName || order.title || "Order";
             sendPaymentNotification(label);
+            logAuditEvent("release_escrow_payment", {
+                orderId: orderId,
+                recipientEmail: recipientEmail,
+                recipientId: recipientId,
+                payoutAmount: payoutAmount
+            });
             alert("Payment Released");
 
         })
@@ -1071,7 +1236,6 @@ function approveOrder(orderId){
     });
 
 }
-
 /* ==================================
 CHAT SYSTEM (privacy-filtered)
 Renders into the Messenger-style markup
@@ -1561,6 +1725,7 @@ async function deleteProduct(productId){
         }
 
         await db.collection("items").doc(productId).delete();
+        logAuditEvent("delete_listing", { itemId: productId, byAdmin: isAdmin() });
         alert("Product deleted");
 
     }catch(error){
@@ -1823,6 +1988,7 @@ async function featureApp(appId){
 
     try{
         await db.collection("apps").doc(appId).update({ featured:true });
+        logAuditEvent("feature_app", { appId: appId });
         alert("App featured");
     }catch(error){
         console.log(error);
@@ -1836,6 +2002,7 @@ async function unfeatureApp(appId){
 
     try{
         await db.collection("apps").doc(appId).update({ featured:false });
+        logAuditEvent("unfeature_app", { appId: appId });
         alert("Featured status removed");
     }catch(error){
         console.log(error);
@@ -1849,6 +2016,7 @@ async function deleteApp(appId){
 
     try{
         await db.collection("apps").doc(appId).delete();
+        logAuditEvent("delete_app", { appId: appId });
         alert("App deleted");
     }catch(error){
         console.log(error);
@@ -2523,6 +2691,7 @@ async function banUser(userId){
 
     try{
         await db.collection("users").doc(userId).set({ banned:true }, { merge:true });
+        logAuditEvent("ban_user", { userId: userId });
         alert("User banned");
     }catch(error){
         console.log(error);
@@ -2536,6 +2705,7 @@ async function unbanUser(userId){
 
     try{
         await db.collection("users").doc(userId).set({ banned:false }, { merge:true });
+        logAuditEvent("unban_user", { userId: userId });
         alert("User unbanned");
     }catch(error){
         console.log(error);
@@ -2587,6 +2757,7 @@ async function adminDeleteProduct(productId){
 
     try{
         await db.collection("items").doc(productId).delete();
+        logAuditEvent("admin_delete_product", { itemId: productId });
         alert("Product deleted");
     }catch(error){
         console.log(error);
@@ -2669,6 +2840,7 @@ async function approveFreelancer(freelancerId){
 
     try{
         await db.collection("freelancers").doc(freelancerId).update({ verified:true });
+        logAuditEvent("verify_freelancer", { freelancerId: freelancerId });
         alert("Freelancer approved");
     }catch(error){
         console.log(error);
@@ -2682,6 +2854,7 @@ async function verifySeller(sellerId){
 
     try{
         await db.collection("sellers").doc(sellerId).update({ verified:true });
+        logAuditEvent("verify_seller", { sellerId: sellerId });
         alert("Seller verified");
     }catch(error){
         console.log(error);
@@ -2695,6 +2868,7 @@ async function sponsorSeller(sellerId){
 
     try{
         await db.collection("sellers").doc(sellerId).update({ sponsored:true });
+        logAuditEvent("sponsor_seller", { sellerId: sellerId });
         alert("Seller sponsored");
     }catch(error){
         console.log(error);
@@ -2702,6 +2876,56 @@ async function sponsorSeller(sellerId){
     }
 
 }
+
+/* ==================================
+ADMIN — AUDIT LOG VIEWER
+Drop a <div id="auditLogFeed"></div>
+anywhere in your admin panel and call
+loadAuditLogs() when that page loads
+(the same way loadAdminUsers() etc.
+are called) to see the trail.
+================================== */
+
+function loadAuditLogs(){
+    if(!requireAdmin()) return;
+
+    const container = document.getElementById("auditLogFeed");
+    if(!container) return;
+
+    db.collection("auditLogs")
+    .orderBy("createdAt", "desc")
+    .limit(100)
+    .onSnapshot(snapshot=>{
+
+        container.innerHTML = "";
+
+        if(snapshot.empty){
+            container.innerHTML = "<p class='small' style='text-align:center; padding:20px;'>No audit events yet</p>";
+            return;
+        }
+
+        snapshot.forEach(doc=>{
+
+            const log = doc.data();
+            const date = log.createdAt ? new Date(log.createdAt.toDate()).toLocaleString() : "N/A";
+            const detailsText = log.details ? JSON.stringify(log.details) : "";
+
+            container.innerHTML += `
+            <div class="card">
+                <div class="card-body">
+                    <h3>${log.action}</h3>
+                    <p class="small">${log.performedByEmail}${log.isAdminAction ? " (admin)" : ""} • ${date}</p>
+                    <p class="small">${detailsText}</p>
+                </div>
+            </div>
+            `;
+
+        });
+
+    });
+
+}
+
 /* ==================================
 ADMIN — REVENUE / ANALYTICS
 ================================== */
@@ -3029,6 +3253,14 @@ function requestWithdrawal(){
         })
         .then(docRef => {
 
+            logAuditEvent("withdrawal_requested", {
+                withdrawalId: docRef.id,
+                amount: amount,
+                bankCode: bankCode,
+                accountNumber: accountNumber,
+                accountName: accountName
+            });
+
             alert(`✅ Withdrawal request submitted. Reference: ${docRef.id}\nProcessing your payout now...`);
             document.getElementById("withdrawAmount").value = "";
             document.getElementById("bankSelect").value = "";
@@ -3058,12 +3290,14 @@ function requestWithdrawal(){
 
                 if(result.status === 'success'){
                     db.collection('withdrawals').doc(docRef.id).update({ status: 'completed' });
+                    logAuditEvent("withdrawal_completed", { withdrawalId: docRef.id, amount: amount });
                 }else{
                     db.collection('withdrawals').doc(docRef.id).update({ status: 'failed' });
                     // Refund wallet if the transfer failed
                     db.collection('wallets').doc(user.uid).update({
                         balance: firebase.firestore.FieldValue.increment(amount)
                     });
+                    logAuditEvent("withdrawal_failed", { withdrawalId: docRef.id, amount: amount, reason: (result && result.message) || "unknown" });
                 }
 
             })
@@ -3073,6 +3307,7 @@ function requestWithdrawal(){
                 db.collection('wallets').doc(user.uid).update({
                     balance: firebase.firestore.FieldValue.increment(amount)
                 });
+                logAuditEvent("withdrawal_failed", { withdrawalId: docRef.id, amount: amount, reason: error.message || "network error" });
             });
 
         })
