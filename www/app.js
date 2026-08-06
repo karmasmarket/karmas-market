@@ -291,9 +291,25 @@ function login(){
     }, 10000);
 
     auth.signInWithEmailAndPassword(email, password)
-    .then(()=>{
+    .then(async (result)=>{
         settled = true;
         clearTimeout(timeoutId);
+
+        // Force a brand new ID token immediately after sign-in, discarding
+        // anything cached from a previous session on this browser/device.
+        // Without this, switching between two different accounts on the
+        // same browser (e.g. testing a seller account then a freelancer
+        // account) can leave a stale token in memory whose email claim
+        // doesn't match the account that just signed in — every Firestore
+        // rule checking request.auth.token.email then fails with
+        // "Missing or insufficient permissions" even though the user is
+        // genuinely logged in correctly.
+        try{
+            await result.user.getIdToken(true);
+        }catch(tokenError){
+            console.log("Token refresh after login failed:", tokenError);
+        }
+
         logAuditEvent("login", { email: email });
         window.location.href = "home.html";
     })
@@ -503,6 +519,17 @@ function showBrowserNotification(title, message){
 
 function startRealtimeNotifications(){
 
+    // Only attach this listener once we actually have a signed-in user --
+    // firing it before auth resolves is what caused repeated
+    // "Missing or insufficient permissions" console spam, since the
+    // notifications rule requires isSignedIn().
+    if(!auth.currentUser){
+        auth.onAuthStateChanged(user=>{
+            if(user) startRealtimeNotifications();
+        });
+        return;
+    }
+
     db.collection("notifications")
     .orderBy("createdAt", "desc")
     .limit(1)
@@ -514,6 +541,13 @@ function startRealtimeNotifications(){
             showBrowserNotification(data.title, data.message);
         });
 
+    }, error=>{
+        // Every onSnapshot listener needs an error callback, or Firebase
+        // throws an "Uncaught Error in snapshot listener" straight to the
+        // console with no context. This just logs it quietly instead --
+        // a broken notification feed shouldn't interrupt anything else
+        // the user is doing on the page.
+        console.log("Notification listener error:", error.message);
     });
 
 }
@@ -868,7 +902,6 @@ document.addEventListener("DOMContentLoaded", ()=>{
         displayItems();
     }
 });
-
 /* ==================================
 PRODUCT PAYMENT (tiered commission)
 ================================== */
@@ -934,6 +967,7 @@ function payForItem(title, price, seller, itemId){
     });
 
 }
+
 /* ==================================
 FREELANCER SYSTEM
 ================================== */
@@ -1863,6 +1897,7 @@ async function promoteProduct(productId){
     }
 
 }
+
 /* ==================================
 APP MARKETPLACE
 ================================== */
@@ -2090,7 +2125,6 @@ function loadFeaturedApps(){
     });
 
 }
-
 /* ==================================
 AFFILIATE / SPONSORED ADS
 ================================== */
@@ -2464,6 +2498,7 @@ function payForAdvertisement(tier){
     });
 
 }
+
 /* ==================================
 KARMAS-TOOLS
 (Redirects pass the logged-in user's
@@ -2634,7 +2669,6 @@ function loadTemplates(){
     });
 
 }
-
 /* ==================================
 CONTACT FORM
 ================================== */
@@ -2748,7 +2782,8 @@ async function unbanUser(userId){
     }
 
 }
-  /* ==================================
+
+/* ==================================
 ADMIN — PRODUCTS
 ================================== */
 
@@ -2959,6 +2994,7 @@ function loadAuditLogs(){
     });
 
 }
+
 /* ==================================
 ADMIN — REVENUE / ANALYTICS
 ================================== */
@@ -3403,6 +3439,8 @@ function loadWithdrawalHistory(){
     });
 
 }
+
+
 /* ==================================
 APP INITIALIZATION
 ================================== */
