@@ -3,7 +3,7 @@
 // Caches key files for offline access
 // =====================================
 
-const CACHE_NAME = "karmas-market-v1";
+const CACHE_NAME = "karmas-market-v2"; // bumped so old broken cache is discarded
 
 const ASSETS_TO_CACHE = [
   "/",
@@ -56,10 +56,40 @@ self.addEventListener("fetch", event => {
 
   event.respondWith(
     caches.match(event.request).then(cached => {
-      return cached || fetch(event.request).catch(() => {
+      if (cached) return cached;
+
+      return fetch(event.request).catch(() => {
+        // IMPORTANT: this catch block must ALWAYS resolve to a real
+        // Response object. Previously it returned undefined for any
+        // request that wasn't a full page load (images, scripts, css,
+        // icons, etc). respondWith() cannot accept undefined — it throws
+        // "Failed to convert value to 'Response'" and logs a network
+        // error, which is exactly what was flooding the console.
+
         if (event.request.destination === "document") {
-          return caches.match("/index.html");
+          return caches.match("/index.html").then(page => {
+            return page || new Response(
+              "<h1>You're offline</h1><p>Please check your connection and try again.</p>",
+              { status: 503, headers: { "Content-Type": "text/html" } }
+            );
+          });
         }
+
+        // For images: return a tiny transparent placeholder instead of
+        // failing, so broken image icons don't appear everywhere.
+        if (event.request.destination === "image") {
+          return new Response(
+            new Blob(), { status: 503, statusText: "Offline" }
+          );
+        }
+
+        // For everything else (scripts, css, fonts, json, etc.) — return
+        // an empty but valid Response so the app doesn't crash trying to
+        // process a missing resource while offline.
+        return new Response("", {
+          status: 503,
+          statusText: "Offline — resource unavailable"
+        });
       });
     })
   );

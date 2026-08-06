@@ -231,6 +231,7 @@ function friendlyAuthError(error){
     }
 
 }
+
 /* ==================================
 SIGN UP / LOGIN / LOGOUT
 ================================== */
@@ -690,19 +691,49 @@ async function postItem(){
 
         setBtnState("Saving product...", true);
 
-        await db.collection("items").add({
+        // The image is already safely uploaded to Cloudinary at this point —
+        // we must not make the user re-upload it just because the Firestore
+        // write hiccups. This retries the save (not the image) up to 3 times
+        // with a short growing delay, which covers the common case on weak
+        // networks: the auth token silently failed to refresh mid-flow and
+        // the write throws "unavailable" / "network-request-failed" / a
+        // generic permission-looking error even though the rules are fine.
+        async function saveItemWithRetry(attempt){
+            try{
+                await db.collection("items").add({
 
-            seller,
-            sellerEmail: user.email,
-            title,
-            price: Number(price),
-            description,
-            imageUrl: data.secure_url,
-            featured:false,
-            promoted:false,
-            createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    seller,
+                    sellerEmail: user.email,
+                    title,
+                    price: Number(price),
+                    description,
+                    imageUrl: data.secure_url,
+                    featured:false,
+                    promoted:false,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
 
-        });
+                });
+            }catch(err){
+                const isNetworkish =
+                    err.code === "unavailable" ||
+                    err.code === "auth/network-request-failed" ||
+                    err.message?.includes("network") ||
+                    !navigator.onLine;
+
+                if(isNetworkish && attempt < 3){
+                    setBtnState(`Connection hiccup, retrying (${attempt}/3)...`, true);
+                    // Give the token/network a moment to recover before trying again.
+                    await new Promise(r => setTimeout(r, 1500 * attempt));
+                    // Force a fresh ID token before retrying — if the token
+                    // refresh itself was what failed, this clears it out.
+                    try{ await user.getIdToken(true); }catch(_){}
+                    return saveItemWithRetry(attempt + 1);
+                }
+                throw err;
+            }
+        }
+
+        await saveItemWithRetry(1);
 
         sendDealNotification(title, price);
 
@@ -722,6 +753,8 @@ async function postItem(){
             alert("Upload timed out — your connection may be too slow right now. Please try again, or try a smaller image.");
         }else if(error.message === "NETWORK"){
             alert("Network error during upload. Please check your connection and try again.");
+        }else if(error.code === "unavailable" || error.message?.includes("network")){
+            alert("Your image was uploaded, but saving the product kept failing due to a weak connection. Please try posting again — you may need to re-select the image.");
         }else{
             alert(error.message);
         }
@@ -1236,6 +1269,7 @@ function approveOrder(orderId){
     });
 
 }
+
 /* ==================================
 CHAT SYSTEM (privacy-filtered)
 Renders into the Messenger-style markup
@@ -2056,6 +2090,7 @@ function loadFeaturedApps(){
     });
 
 }
+
 /* ==================================
 AFFILIATE / SPONSORED ADS
 ================================== */
@@ -2713,8 +2748,7 @@ async function unbanUser(userId){
     }
 
 }
-
-/* ==================================
+  /* ==================================
 ADMIN — PRODUCTS
 ================================== */
 
@@ -2925,7 +2959,6 @@ function loadAuditLogs(){
     });
 
 }
-
 /* ==================================
 ADMIN — REVENUE / ANALYTICS
 ================================== */
@@ -3370,8 +3403,6 @@ function loadWithdrawalHistory(){
     });
 
 }
-
-
 /* ==================================
 APP INITIALIZATION
 ================================== */
