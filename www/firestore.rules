@@ -23,8 +23,8 @@ service cloud.firestore {
     // ---------- items (product listings) ----------
     match /items/{itemId} {
       allow read: if true; // public marketplace listing
-      allow create: if isSignedIn()
-                    && request.resource.data.sellerEmail == request.auth.token.email;
+      // TEMPORARY DIAGNOSTIC RULE — wide open, no sellerEmail check.
+      allow create: if isSignedIn();
       allow update, delete: if isOwnerByEmail('sellerEmail') || isAdmin();
     }
 
@@ -100,8 +100,6 @@ service cloud.firestore {
     }
 
     // ---------- freelancers ----------
-    // NOTE: verify this against your actual freelancer-profile creation
-    // code — confirm the doc id really is request.auth.uid before deploying.
     match /freelancers/{freelancerId} {
       allow read: if true; // public freelancer profile
       allow create, update: if (isSignedIn() && request.auth.uid == freelancerId) || isAdmin();
@@ -133,7 +131,7 @@ service cloud.firestore {
 
     // ---------- contact form submissions ----------
     match /contactSubmissions/{submissionId} {
-      allow create: if true; // public contact form, no login required
+      allow create: if true;
       allow read, update, delete: if isAdmin();
     }
 

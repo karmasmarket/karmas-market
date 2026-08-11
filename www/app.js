@@ -1,402 +1,842 @@
 /* ==================================
+
 GLOBAL VARIABLES
+
 ================================== */
+
 console.log("APP.JS LOADED - CLEAN VERSION");
 
+
+
 let currentChatId = null;
+
 let currentItemId = null;
+
 let currentSeller = "";
+
 let messaging = null;
+
 let analyticsChart = null;
 
+
+
 try{
+
     if(firebase.messaging){
+
         messaging = firebase.messaging();
+
     }
+
 }catch(error){
+
     console.log("Messaging not available", error);
+
 }
 
+
+
 /* ==================================
+
 ADMIN CONFIGURATION
+
 ================================== */
+
+
 
 const ADMIN_EMAIL = "karmaking426@gmail.com";
 
+
+
 function isAdmin(){
+
     const user = auth.currentUser;
+
     return !!(user && user.email === ADMIN_EMAIL);
+
 }
+
+
 
 function requireAdmin(){
+
     if(!isAdmin()){
+
         alert("Access denied. Admins only.");
+
         return false;
+
     }
+
     return true;
+
 }
 
+
+
 /* ==================================
+
 AUDIT LOGGING
+
 Records fraud-relevant actions (admin
+
 moderation, listing deletions, escrow
+
 releases, withdrawals, logins) to a
+
 dedicated Firestore collection, so
+
 there's a permanent trail if something
+
 is ever disputed or investigated.
+
 This never blocks or fails the action
+
 it's logging — if writing the log
+
 itself fails, that failure is only
+
 logged to the console, not shown to
+
 the user.
+
 ================================== */
+
+
 
 function logAuditEvent(action, details){
 
+
+
     try{
+
+
 
         const user = auth.currentUser;
 
+
+
         db.collection("auditLogs").add({
+
             action: action,
+
             performedByEmail: user ? user.email : "system",
+
             performedByUid: user ? user.uid : null,
+
             isAdminAction: isAdmin(),
+
             details: details || {},
+
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
+
         }).catch(error=>{
+
             console.log("Audit log write failed:", error);
+
         });
 
+
+
     }catch(error){
+
         console.log("Audit log error:", error);
+
     }
+
+
 
 }
 
+
+
 /* ==================================
+
 COMMISSION ENGINE
+
 (Tiered structure — applies to both
+
 product sales and freelancer hires)
+
 ================================== */
+
+
 
 function getCommissionRate(price){
 
+
+
     const amount = Number(price);
 
+
+
     if(amount <= 20000) return 0.10;
+
     if(amount <= 100000) return 0.08;
+
     if(amount <= 500000) return 0.06;
+
     if(amount <= 2000000) return 0.04;
+
+
 
     return 0.03; // above ₦2,000,000
 
+
+
 }
+
+
 
 function calculateCommission(price){
 
+
+
     const amount = Number(price);
+
     const rate = getCommissionRate(amount);
+
+
 
     return Math.round(amount * rate);
 
+
+
 }
 
+
+
 /* ==================================
+
 AUTH PERSISTENCE
+
 (keeps users logged in across brief
+
 network drops instead of forcing
+
 re-auth on every hiccup)
+
 ================================== */
+
+
 
 try{
+
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
+
 }catch(error){
+
     console.log("Persistence setup error:", error);
+
 }
 
+
+
 /* ==================================
+
 AUTH STATE
+
 ================================== */
+
+
 
 auth.onAuthStateChanged((user)=>{
 
+
+
     const userEmail = document.getElementById("userEmail");
+
     const userStatus = document.getElementById("userStatus");
+
+
 
     if(user){
 
+
+
         if(userEmail){
+
             userEmail.innerText = user.email;
+
         }
 
+
+
         if(userStatus){
+
             userStatus.innerText = "Logged in: " + user.email;
+
         }
+
+
+
+        // Route to the right default tab based on account role, once per
+
+        // page load. Sellers already land on Products (hardcoded active
+
+        // in home.html), but freelancers were also landing on Products
+
+        // first — which meant a freelancer's own listings/pricing info
+
+        // could look like it was mixed in with the general product feed.
+
+        // This sends freelancers straight to Services instead. It only
+
+        // runs once so it never fights with the user's own navigation
+
+        // afterward.
+
+        if(!window.hasAppliedRoleLanding){
+
+            window.hasAppliedRoleLanding = true;
+
+
+
+            db.collection("users").doc(user.uid).get().then(doc=>{
+
+                if(doc.exists && doc.data().role === "freelancer"){
+
+                    const servicesBtn = Array.from(document.querySelectorAll(".nav-btn"))
+
+                        .find(btn => btn.getAttribute("onclick") && btn.getAttribute("onclick").includes("'services'"));
+
+                    showPage("services", servicesBtn);
+
+                }
+
+            }).catch(error=>{
+
+                console.log("Role landing check failed:", error);
+
+            });
+
+        }
+
+
 
     }else{
 
+
+
         if(userStatus){
+
             userStatus.innerText = "Not logged in";
+
         }
 
+
+
     }
+
+
 
 });
 
+
+
 /* ==================================
+
 INPUT SANITIZATION
+
 Strips HTML tags from user-supplied
+
 text before it's ever written to
+
 Firestore, so stored data can't carry
+
 a script/markup injection payload.
+
 Apply this to any free-text field
+
 before saving (messages, reviews,
+
 product titles/descriptions, contact
+
 form, promo text, etc).
+
 ================================== */
+
+
 
 function sanitizeText(value){
 
+
+
     if(value === null || value === undefined) return "";
 
+
+
     return String(value)
+
         .replace(/<[^>]*>/g, "")   // strip HTML tags
+
         .replace(/[<>]/g, "")      // strip any stray angle brackets
+
         .trim();
+
+
 
 }
 
+
+
 /* ==================================
+
 LOGIN RATE LIMITING
+
 Simple client-side cooldown: blocks
+
 rapid repeated login attempts to slow
+
 down brute-force guessing. This is a
+
 first line of defense only — it does
+
 not replace Firebase App Check or
+
 server-side throttling.
+
 ================================== */
 
+
+
 const LOGIN_MAX_ATTEMPTS = 5;
+
 const LOGIN_WINDOW_MS = 60000; // 1 minute
+
 let loginAttempts = [];
+
+
 
 function isLoginRateLimited(){
 
+
+
     const now = Date.now();
+
+
 
     loginAttempts = loginAttempts.filter(t => now - t < LOGIN_WINDOW_MS);
 
+
+
     if(loginAttempts.length >= LOGIN_MAX_ATTEMPTS){
+
         return true;
+
     }
 
+
+
     loginAttempts.push(now);
+
     return false;
+
+
 
 }
 
+
+
 /* ==================================
+
 NETWORK / AUTH ERROR MESSAGING
+
 Translates raw Firebase error codes
+
 into messages a non-technical user
+
 can actually act on.
+
 ================================== */
+
+
 
 function friendlyAuthError(error){
 
+
+
     const code = error && error.code ? error.code : "";
 
+
+
     if(!navigator.onLine){
+
         return "You appear to be offline. Please check your internet connection and try again.";
+
     }
 
+
+
     switch(code){
+
         case "auth/network-request-failed":
+
             return "Connection lost. Please check your internet and try again.";
+
         case "auth/user-not-found":
+
         case "auth/wrong-password":
+
         case "auth/invalid-credential":
+
             return "Incorrect email or password. Please check your details and try again.";
+
         case "auth/too-many-requests":
+
             return "Too many attempts. Please wait a few minutes before trying again.";
+
         case "auth/invalid-email":
+
             return "Please enter a valid email address.";
+
         case "auth/email-already-in-use":
+
             return "An account with this email already exists.";
+
         case "auth/weak-password":
+
             return "Password is too weak. Please use at least 6 characters.";
+
         default:
+
             return error && error.message ? error.message : "Something went wrong. Please try again.";
+
     }
+
+
 
 }
 
+
+
 /* ==================================
+
 SIGN UP / LOGIN / LOGOUT
+
 ================================== */
+
+
 
 function signUp(){
 
+
+
     const email = document.getElementById("email").value.trim();
+
     const password = document.getElementById("password").value;
 
+
+
     if(!email || !password){
+
         alert("Please enter email and password");
+
         return;
+
     }
+
+
 
     if(!navigator.onLine){
+
         alert("You're offline. Please check your internet connection and try again.");
+
         return;
+
     }
 
+
+
     auth.createUserWithEmailAndPassword(email, password)
+
     .then(()=>{
+
         alert("Account created successfully");
+
     })
+
     .catch(error=>{
+
         alert(friendlyAuthError(error));
+
     });
 
+
+
 }
+
+
 
 function login(){
 
+
+
     const email = document.getElementById("email").value.trim();
+
     const password = document.getElementById("password").value;
 
+
+
     if(!email || !password){
+
         alert("Please enter email and password");
+
         return;
+
     }
+
+
 
     if(isLoginRateLimited()){
+
         alert("Too many login attempts. Please wait a minute before trying again.");
+
         return;
+
     }
+
+
 
     if(!navigator.onLine){
+
         alert("You're offline. Please check your internet connection and try again.");
+
         return;
+
     }
 
+
+
     // Safety timeout: if Firebase hangs longer than expected on a flaky
+
     // connection, tell the user instead of leaving them stuck with no feedback.
+
     let settled = false;
+
     const timeoutId = setTimeout(()=>{
+
         if(!settled){
+
             alert("This is taking longer than usual. Please check your connection and try again.");
+
         }
+
     }, 10000);
 
+
+
     auth.signInWithEmailAndPassword(email, password)
+
     .then(async (result)=>{
+
         settled = true;
+
         clearTimeout(timeoutId);
+
+
 
         // Force a brand new ID token immediately after sign-in, discarding
+
         // anything cached from a previous session on this browser/device.
+
         // Without this, switching between two different accounts on the
+
         // same browser (e.g. testing a seller account then a freelancer
+
         // account) can leave a stale token in memory whose email claim
+
         // doesn't match the account that just signed in — every Firestore
+
         // rule checking request.auth.token.email then fails with
+
         // "Missing or insufficient permissions" even though the user is
+
         // genuinely logged in correctly.
+
         try{
+
             await result.user.getIdToken(true);
+
         }catch(tokenError){
+
             console.log("Token refresh after login failed:", tokenError);
+
         }
 
+
+
         logAuditEvent("login", { email: email });
+
         window.location.href = "home.html";
+
     })
+
     .catch(error=>{
+
         settled = true;
+
         clearTimeout(timeoutId);
+
         alert(friendlyAuthError(error));
+
     });
 
+
+
 }
+
+
 
 function logout(){
 
+
+
     const loggingOutUser = auth.currentUser;
 
+
+
     auth.signOut()
+
     .then(()=>{
+
         if(loggingOutUser){
+
             logAuditEvent("logout", { email: loggingOutUser.email });
+
         }
+
         window.location.href = "index.html";
+
     })
+
     .catch(error=>{
+
         alert(friendlyAuthError(error));
+
     });
 
+
+
 }
+
 /* ==================================
+
 PAGE NAVIGATION
+
 ================================== */
+
+
 
 function showPage(id, btn){
 
+
+
     document.querySelectorAll(".page").forEach(page=>{
+
         page.classList.remove("active");
+
     });
+
+
 
     const page = document.getElementById(id);
+
     if(page){
+
         page.classList.add("active");
+
     }
+
+
 
     document.querySelectorAll(".nav-btn").forEach(nav=>{
+
         nav.classList.remove("active");
+
     });
 
+
+
     if(btn){
+
         btn.classList.add("active");
+
     }
+
+
 
     window.scrollTo({ top:0, behavior:"smooth" });
 
+
+
     if(id === "withdrawalPage"){
+
         if(typeof loadBankList === "function") loadBankList();
+
         if(typeof loadWithdrawalHistory === "function") loadWithdrawalHistory();
+
     }
+
+
 
 }
 
+
+
 /* ==================================
+
 SEARCH
+
 ================================== */
+
+
 
 function searchItems(value){
 
+
+
     const search = value.toLowerCase();
+
     const cards = document.querySelectorAll("#itemFeed .card");
 
+
+
     cards.forEach(card=>{
+
         const title = card.querySelector("h3").innerText.toLowerCase();
+
         card.style.display = title.includes(search) ? "block" : "none";
+
     });
 
+
+
 }
+
+
 
 function searchApps(value){
 
+
+
     const keyword = value.toLowerCase();
+
     const cards = document.querySelectorAll("#appFeed .card");
 
+
+
     cards.forEach(card=>{
+
         const title = card.querySelector("h3").innerText.toLowerCase();
+
         card.style.display = title.includes(keyword) ? "block" : "none";
+
     });
 
-}
 
+
+}
 /* ==================================
 LOADER / ONBOARDING
 ================================== */
@@ -412,22 +852,24 @@ function closeOnboarding(){
 NOTIFICATIONS
 ================================== */
 
-function createNotification(title, message){
+function createNotification(title, message, itemId){
 
     db.collection("notifications").add({
         title: sanitizeText(title),
         message: sanitizeText(message),
+        itemId: itemId || null,
+        read: false,
         createdAt: firebase.firestore.FieldValue.serverTimestamp()
     });
 
 }
 
-function sendDealNotification(title, price){
-    createNotification("🔥 New Deal Alert", `${title} is now available for ₦${price}`);
+function sendDealNotification(title, price, itemId){
+    createNotification("🔥 New Deal Alert", `${title} is now available for ₦${price}`, itemId);
 }
 
-function sendAppNotification(appName){
-    createNotification("📱 New App Added", `${appName} is now available in the App Marketplace`);
+function sendAppNotification(appName, itemId){
+    createNotification("📱 New App Added", `${appName} is now available in the App Marketplace`, itemId);
 }
 
 function sendFreelancerNotification(name){
@@ -465,23 +907,36 @@ function loadNotifications(){
     .onSnapshot(snapshot=>{
 
         feed.innerHTML = "";
-        let count = 0;
+        let unreadCount = 0;
 
         snapshot.forEach(doc=>{
-            count++;
             const data = doc.data();
+            const isRead = !!data.read;
+            if(!isRead) unreadCount++;
 
             feed.innerHTML += `
-            <div style="background:#111; padding:15px; border-radius:14px; border:1px solid rgba(255,215,0,.2); margin-bottom:10px;">
+            <div onclick="handleNotificationClick('${doc.id}', ${data.itemId ? `'${data.itemId}'` : null})"
+                 style="background:${isRead ? '#0a0a0a' : '#111'}; padding:15px; border-radius:14px; border:1px solid ${isRead ? 'rgba(255,215,0,.08)' : 'rgba(255,215,0,.2)'}; margin-bottom:10px; cursor:pointer; opacity:${isRead ? '0.6' : '1'};">
                 <h3 style="color:gold;">${data.title}</h3>
                 <p>${data.message}</p>
             </div>
             `;
         });
 
-        updateNotificationBadge(count);
+        updateNotificationBadge(unreadCount);
 
     });
+
+}
+
+function handleNotificationClick(notificationId, itemId){
+
+    db.collection("notifications").doc(notificationId).update({ read: true })
+    .catch(error => console.log("Could not mark notification read:", error.message));
+
+    if(itemId){
+        openProductDetails(itemId);
+    }
 
 }
 
@@ -734,7 +1189,7 @@ async function postItem(){
         // generic permission-looking error even though the rules are fine.
         async function saveItemWithRetry(attempt){
             try{
-                await db.collection("items").add({
+                const newItemRef = await db.collection("items").add({
 
                     seller,
                     sellerEmail: user.email,
@@ -747,6 +1202,7 @@ async function postItem(){
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
 
                 });
+                return newItemRef;
             }catch(err){
                 const isNetworkish =
                     err.code === "unavailable" ||
@@ -767,9 +1223,9 @@ async function postItem(){
             }
         }
 
-        await saveItemWithRetry(1);
+        const newItemRef = await saveItemWithRetry(1);
 
-        sendDealNotification(title, price);
+        sendDealNotification(title, price, newItemRef ? newItemRef.id : null);
 
         alert("Product Posted Successfully");
 
@@ -817,7 +1273,7 @@ function displayItems(){
             const isOwner = currentUser && currentUser.email === item.sellerEmail;
 
             feed.innerHTML += `
-            <div class="card">
+            <div class="card" id="item-${doc.id}">
                 <img src="${item.imageUrl}" alt="${item.title}">
                 <div class="card-body">
                     <h3>${item.title}</h3>
@@ -832,7 +1288,7 @@ function displayItems(){
                     <button onclick="payForItem('${item.title}', ${item.price}, '${item.seller}', '${doc.id}')">
                         Buy Now
                     </button>
-                    <button class="alt" onclick="openChat('${doc.id}', '${item.seller}')">
+                    <button class="alt" onclick="openChat('${doc.id}', '${item.sellerEmail}')">
                         Chat Seller
                     </button>
                     ${isOwner ? `
@@ -847,6 +1303,23 @@ function displayItems(){
         });
 
     });
+
+}
+
+function openProductDetails(itemId){
+
+    showPage("itemFeedPage");
+
+    // Give the feed a moment to render before scrolling to the target card
+    setTimeout(()=>{
+        const card = document.getElementById(`item-${itemId}`);
+        if(card){
+            card.scrollIntoView({ behavior: "smooth", block: "center" });
+            card.style.transition = "box-shadow 0.3s";
+            card.style.boxShadow = "0 0 0 3px gold";
+            setTimeout(()=>{ card.style.boxShadow = ""; }, 2500);
+        }
+    }, 400);
 
 }
 
@@ -897,9 +1370,60 @@ async function deleteItem(itemId){
 
 }
 
+// Deletes a freelancer's own service listing. Mirrors deleteItem() above.
+// Firestore rule for /freelancers/{freelancerId} requires the document ID
+// itself to equal request.auth.uid, so ownership is checked the same way.
+async function deleteFreelancerListing(freelancerId){
+
+    const user = auth.currentUser;
+    if(!user){
+        alert("Please login first");
+        return;
+    }
+
+    if(user.uid !== freelancerId){
+        alert("You can only delete your own listing.");
+        return;
+    }
+
+    const confirmed = confirm("Delete this freelancer listing? This cannot be undone.");
+    if(!confirmed) return;
+
+    try{
+
+        const docRef = db.collection("freelancers").doc(freelancerId);
+        const docSnap = await docRef.get();
+
+        if(!docSnap.exists){
+            alert("This listing no longer exists.");
+            return;
+        }
+
+        await docRef.delete();
+        logAuditEvent("delete_freelancer_listing", { freelancerId: freelancerId });
+        alert("Listing deleted.");
+
+    }catch(error){
+        console.error(error);
+        if(!navigator.onLine){
+            alert("You're offline. Please check your connection and try again.");
+        }else{
+            alert("Failed to delete listing: " + error.message);
+        }
+    }
+
+}
+
 document.addEventListener("DOMContentLoaded", ()=>{
     if(document.getElementById("itemFeed")){
         displayItems();
+        // Re-render once login is confirmed, so the "Delete Listing" button
+        // (which depends on knowing who's logged in) shows up correctly.
+        // Without this, if the page draws before auth resolves, every card
+        // renders as if no one is logged in and never redraws.
+        auth.onAuthStateChanged(()=>{
+            displayItems();
+        });
     }
 });
 /* ==================================
@@ -919,6 +1443,21 @@ function payForItem(title, price, seller, itemId){
     const appFee = calculateCommission(basePrice);
     const totalCharge = basePrice + appFee;
 
+    // Show the buyer a clear price breakdown (item price vs. platform fee)
+    // before opening the payment popup, instead of only ever seeing one
+    // lump total with no explanation of what it's made of.
+    const breakdownMessage =
+        "Order Summary\n\n" +
+        "Item: " + title + "\n" +
+        "Item Price: \u20A6" + basePrice.toLocaleString() + "\n" +
+        "Platform Fee: \u20A6" + appFee.toLocaleString() + "\n" +
+        "-----------------------------\n" +
+        "Total to Pay: \u20A6" + totalCharge.toLocaleString() + "\n\n" +
+        "Press OK to continue to secure payment.";
+
+    const confirmedBreakdown = confirm(breakdownMessage);
+    if(!confirmedBreakdown) return;
+
     FlutterwaveCheckout({
 
         public_key: "FLWPUBK-10783948c6fa8ead4ce8e667a24a3d51-X",
@@ -931,7 +1470,7 @@ function payForItem(title, price, seller, itemId){
 
         customizations:{
             title: "Karmas Market",
-            description: title + " purchase"
+            description: title + " - Item: \u20A6" + basePrice.toLocaleString() + " + Fee: \u20A6" + appFee.toLocaleString()
         },
 
         callback:function(response){
@@ -981,10 +1520,18 @@ function openFreelancers(skill){
 
     feed.innerHTML = "Loading freelancers...";
 
-    db.collection("freelancers")
-    .where("skill", "==", skill)
-    .get()
-    .then(snapshot=>{
+    function fetchFreelancers(){
+        db.collection("freelancers")
+        .where("skill", "==", skill)
+        .get()
+        .then(renderFreelancers)
+        .catch(error=>{
+            console.log(error);
+            feed.innerHTML = "<h3>Error loading freelancers</h3>";
+        });
+    }
+
+    function renderFreelancers(snapshot){
 
         feed.innerHTML = "";
 
@@ -993,12 +1540,15 @@ function openFreelancers(skill){
             return;
         }
 
+        const currentUser = auth.currentUser;
+
         snapshot.forEach(doc=>{
 
             const freelancer = doc.data();
+            const isOwner = currentUser && currentUser.uid === doc.id;
 
             feed.innerHTML += `
-            <div class="card">
+            <div class="card" id="freelancer-${doc.id}">
                 <img src="${freelancer.image || 'https://via.placeholder.com/400'}">
                 <div class="card-body">
                     <h3>${freelancer.name} ${freelancer.verified ? "✔️" : ""}</h3>
@@ -1016,6 +1566,11 @@ function openFreelancers(skill){
                     </select>
                     <button class="alt" onclick="submitReview('${doc.id}')">Submit Review</button>
                     <div id="reviews-${doc.id}"></div>
+                    ${isOwner ? `
+                    <button class="btn-danger" onclick="deleteFreelancerListing('${doc.id}')">
+                        Delete Listing
+                    </button>
+                    ` : ""}
                 </div>
             </div>
             `;
@@ -1024,10 +1579,15 @@ function openFreelancers(skill){
 
         });
 
-    })
-    .catch(error=>{
-        console.log(error);
-        feed.innerHTML = "<h3>Error loading freelancers</h3>";
+    }
+
+    fetchFreelancers();
+
+    // Re-fetch once login is confirmed, so the "Delete Listing" button
+    // (which depends on knowing who's logged in) shows up correctly,
+    // mirroring the same fix applied to displayItems() for products.
+    auth.onAuthStateChanged(()=>{
+        fetchFreelancers();
     });
 
 }
@@ -1216,6 +1776,31 @@ function loadOrders(){
         const color = statusColor(order.status);
         const text = statusText(order.status);
 
+        // Once payment has actually been made (in escrow or fully
+        // completed), both sides of the deal should be able to message
+        // each other — freelancers previously had no dedicated chat with
+        // clients after being hired at all. We reuse the existing chat
+        // system (openChat / sendMessage / loadConversations), keyed the
+        // same way product chats are: a chatId built from the order, and
+        // the OTHER party's real email (never a display name — that was
+        // the earlier chat-delivery bug).
+        const canMessage = order.status === "in_escrow" || order.status === "completed";
+        const chatId = "order_" + doc.id;
+
+        let messageButtonHtml = "";
+
+        if(canMessage && order.freelancerId){
+            // Viewing this as the client: the other party is the
+            // freelancer, looked up by UID to get their real email.
+            // Viewing this as the freelancer: the other party is the
+            // client, whose email is already stored directly.
+            if(user.uid === order.freelancerId){
+                messageButtonHtml = `<button class="alt" onclick="openOrderChat('${chatId}', '${order.client}')">Message Client</button>`;
+            }else{
+                messageButtonHtml = `<button class="alt" onclick="openFreelancerOrderChat('${chatId}', '${order.freelancerId}')">Message Freelancer</button>`;
+            }
+        }
+
         const card = document.createElement("div");
         card.className = "card";
         card.style.borderLeft = `4px solid ${color}`;
@@ -1225,6 +1810,7 @@ function loadOrders(){
                 <p class="price">₦${amount}</p>
                 <p class="small" style="color:${color}; font-weight:bold;">${text}</p>
                 ${order.status === "in_escrow" ? `<button onclick="approveOrder('${doc.id}')">Approve / Release Payment</button>` : ""}
+                ${messageButtonHtml}
             </div>
         `;
 
@@ -1237,14 +1823,48 @@ function loadOrders(){
     }
 
     db.collection("orders").where("buyer", "==", user.email)
-        .onSnapshot(snapshot => snapshot.forEach(renderOrder));
+        .onSnapshot(snapshot => snapshot.forEach(renderOrder),
+            error => console.log("Orders (buyer) listener error:", error.message));
 
     db.collection("orders").where("client", "==", user.email)
-        .onSnapshot(snapshot => snapshot.forEach(renderOrder));
+        .onSnapshot(snapshot => snapshot.forEach(renderOrder),
+            error => console.log("Orders (client) listener error:", error.message));
 
     db.collection("orders").where("sellerEmail", "==", user.email)
-        .onSnapshot(snapshot => snapshot.forEach(renderOrder));
+        .onSnapshot(snapshot => snapshot.forEach(renderOrder),
+            error => console.log("Orders (seller) listener error:", error.message));
 
+    // Freelancer's own hire orders — previously missing entirely, so a
+    // freelancer could never see the jobs they'd been hired for here.
+    db.collection("orders").where("freelancerId", "==", user.uid)
+        .onSnapshot(snapshot => snapshot.forEach(renderOrder),
+            error => console.log("Orders (freelancer) listener error:", error.message));
+
+}
+
+// Opens a chat with a client, from the freelancer's side. The client's
+// email is already stored directly on the order, so no lookup is needed.
+function openOrderChat(chatId, clientEmail){
+    openChat(chatId, clientEmail);
+}
+
+// Opens a chat with a freelancer, from the client's side. Freelancer
+// orders only store the freelancer's UID (order.freelancerId), not their
+// email, so we look them up via the "users" collection (keyed by UID)
+// to get the real email openChat() needs.
+function openFreelancerOrderChat(chatId, freelancerUid){
+    db.collection("users").doc(freelancerUid).get()
+    .then(doc=>{
+        if(doc.exists && doc.data().email){
+            openChat(chatId, doc.data().email);
+        }else{
+            alert("Could not find this freelancer's contact details.");
+        }
+    })
+    .catch(error=>{
+        console.log("Freelancer email lookup failed:", error);
+        alert("Something went wrong opening this chat. Please try again.");
+    });
 }
 /* ==================================
 ESCROW RELEASE (commission-aware)
@@ -1284,13 +1904,35 @@ function approveOrder(orderId){
         })
         .then(()=>{
 
+            // Once payment is fully settled to the seller, the product
+            // listing is no longer for sale, so it auto-removes itself
+            // from the marketplace instead of sitting there looking
+            // available. Only applies to product orders (order.itemId is
+            // only set for product purchases, not freelancer service
+            // orders, since a freelancer's profile shouldn't disappear
+            // after one job).
+            if(order.itemId){
+                return db.collection("items").doc(order.itemId).delete()
+                .catch(error=>{
+                    // Non-fatal: the item may already be gone, or this may
+                    // simply fail quietly — the payout itself has already
+                    // succeeded above, so we don't want to alarm the user
+                    // over a listing cleanup issue.
+                    console.log("Auto-delete of sold listing failed:", error);
+                });
+            }
+
+        })
+        .then(()=>{
+
             const label = order.freelancerName || order.title || "Order";
             sendPaymentNotification(label);
             logAuditEvent("release_escrow_payment", {
                 orderId: orderId,
                 recipientEmail: recipientEmail,
                 recipientId: recipientId,
-                payoutAmount: payoutAmount
+                payoutAmount: payoutAmount,
+                itemAutoDeleted: !!order.itemId
             });
             alert("Payment Released");
 
@@ -1315,7 +1957,7 @@ queries, the anti-scam filter, and auth
 checks are unchanged.
 ================================== */
 
-function openChat(itemId, sellerId){
+function openChat(itemId, sellerEmail){
 
     const user = auth.currentUser;
 
@@ -1324,11 +1966,15 @@ function openChat(itemId, sellerId){
         return;
     }
 
-    currentChatId = itemId + "_" + sellerId;
-    currentSeller = sellerId;
+    // sellerEmail must be the seller's real email (not their display name)
+    // so it matches what's stored in Firestore's "participants" array below.
+    // Using a display name here was the root cause of messages never
+    // reaching the seller's inbox.
+    currentChatId = itemId + "_" + sellerEmail;
+    currentSeller = sellerEmail;
 
     showPage("chatPage");
-    updateChatHeader(sellerId);
+    updateChatHeader(sellerEmail);
     loadMessages();
 
 }
@@ -1410,15 +2056,34 @@ function sendMessage(){
 
     });
 
+    // Both people in the conversation must be added to "participants" on
+    // the very first message, not just whoever happens to be typing.
+    // Previously only the sender got added, so if the buyer messaged first,
+    // the seller's email was never in the array and their inbox query
+    // (which filters by "participants array-contains my email") would
+    // never find the conversation at all — messages were saving fine,
+    // they just never appeared on the recipient's side.
+    const chatParticipants = [user.email];
+    if(currentSeller && currentSeller !== user.email){
+        chatParticipants.push(currentSeller);
+    }
+
     db.collection("conversations").doc(currentChatId).set({
 
         chatId: currentChatId,
         lastMessage: message,
         sender: user.email,
-        participants: firebase.firestore.FieldValue.arrayUnion(user.email),
+        participants: firebase.firestore.FieldValue.arrayUnion(...chatParticipants),
         updatedAt: firebase.firestore.FieldValue.serverTimestamp()
 
     }, { merge:true });
+
+    // Notify the other person in this chat that a new message has arrived.
+    // Without this, messages were saving to Firestore correctly but the
+    // recipient never got any alert that they'd received one.
+    if(currentSeller && currentSeller !== user.email){
+        notifyNewMessage(user.email, message);
+    }
 
     input.value = "";
 
@@ -1469,7 +2134,7 @@ function loadMessages(){
 
         box.scrollTop = box.scrollHeight;
 
-    });
+    }, error => console.log("Messages listener error:", error.message));
 
 }
 
@@ -1515,7 +2180,7 @@ function loadConversations(){
 
         });
 
-    });
+    }, error => console.log("Conversations listener error:", error.message));
 
 }
 
@@ -1571,7 +2236,7 @@ function loadWallet(){
             });
         }
 
-    });
+    }, error => console.log("Wallet listener error:", error.message));
 
 }
 
@@ -1649,9 +2314,15 @@ function loadSellerProducts(sellerName){
 
         container.innerHTML = "";
 
+        const currentUser = auth.currentUser;
+
         snapshot.forEach(doc=>{
 
             const item = doc.data();
+            // This is the public seller-profile view, so the delete button
+            // is only shown when the person viewing it is the owner —
+            // everyone else just sees the listing with no delete control.
+            const isOwner = currentUser && currentUser.email === item.sellerEmail;
 
             container.innerHTML += `
             <div class="card">
@@ -1659,6 +2330,11 @@ function loadSellerProducts(sellerName){
                 <div class="card-body">
                     <h3>${item.title}</h3>
                     <p class="price">₦${item.price}</p>
+                    ${isOwner ? `
+                    <button class="btn-danger" onclick="deleteItem('${doc.id}')">
+                        Delete Listing
+                    </button>
+                    ` : ""}
                 </div>
             </div>
             `;
@@ -1897,7 +2573,6 @@ async function promoteProduct(productId){
     }
 
 }
-
 /* ==================================
 APP MARKETPLACE
 ================================== */
@@ -2498,7 +3173,6 @@ function payForAdvertisement(tier){
     });
 
 }
-
 /* ==================================
 KARMAS-TOOLS
 (Redirects pass the logged-in user's
@@ -2669,6 +3343,7 @@ function loadTemplates(){
     });
 
 }
+
 /* ==================================
 CONTACT FORM
 ================================== */
@@ -2706,7 +3381,6 @@ function submitContact(){
     });
 
 }
-
 /* ==================================
 ADMIN — USERS
 ================================== */
@@ -2994,7 +3668,6 @@ function loadAuditLogs(){
     });
 
 }
-
 /* ==================================
 ADMIN — REVENUE / ANALYTICS
 ================================== */
@@ -3023,7 +3696,7 @@ function loadAppEarnings(){
         const data = doc.data();
         earningsBox.innerText = "₦" + (data.total || 0);
 
-    });
+    }, error => console.log("Earnings listener error:", error.message));
 
 }
 
@@ -3045,7 +3718,7 @@ function loadTotalRevenue(){
 
         element.innerText = "₦" + revenue + " (transaction volume)";
 
-    });
+    }, error => console.log("Revenue listener error:", error.message));
 
 }
 
@@ -3089,7 +3762,7 @@ function loadTotalOrders(){
 
     db.collection("orders").onSnapshot(snapshot=>{
         element.innerText = snapshot.size;
-    });
+    }, error => console.log("Total orders listener error:", error.message));
 
 }
 
@@ -3109,7 +3782,7 @@ function loadAffiliateClicks(){
 
         element.innerText = clicks;
 
-    });
+    }, error => console.log("Affiliate clicks listener error:", error.message));
 
 }
 
@@ -3120,7 +3793,7 @@ function loadSubscriptions(){
 
     db.collection("subscriptions").onSnapshot(snapshot=>{
         box.innerText = snapshot.size;
-    });
+    }, error => console.log("Subscriptions listener error:", error.message));
 
 }
 
@@ -3131,7 +3804,7 @@ function loadWithdrawals(){
 
     db.collection("withdrawals").onSnapshot(snapshot=>{
         box.innerText = snapshot.size;
-    });
+    }, error => console.log("Withdrawals listener error:", error.message));
 
 }
 
