@@ -9,7 +9,7 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return isSignedIn() && request.auth.token.email == "karmaking426@gmail.com";
+      return isSignedIn() && request.auth.token.email == "musaabdullahi20001@gmail.com";
     }
 
     function isOwnerByEmail(field) {
@@ -24,9 +24,18 @@ service cloud.firestore {
     match /items/{itemId} {
       allow read: if true; // public marketplace listing
       // TEMPORARY DIAGNOSTIC RULE — wide open, no sellerEmail check.
+      // Purpose: prove/disprove whether the sellerEmail match is the blocker.
+      // MUST be reverted to the strict version below once the test is done.
       allow create: if isSignedIn();
       allow update, delete: if isOwnerByEmail('sellerEmail') || isAdmin();
     }
+    // ORIGINAL STRICT RULE — put this back after testing:
+    // match /items/{itemId} {
+    //   allow read: if true;
+    //   allow create: if isSignedIn()
+    //                 && request.resource.data.sellerEmail == request.auth.token.email;
+    //   allow update, delete: if isOwnerByEmail('sellerEmail') || isAdmin();
+    // }
 
     // ---------- orders ----------
     match /orders/{orderId} {
@@ -70,7 +79,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
                     && request.auth.token.email in request.resource.data.participants;
       allow update: if isSignedIn()
-                    && request.auth.token.email in resource.data.participants;
+                    && request.auth.token.email in request.resource.data.participants;
       allow delete: if isAdmin();
     }
 
@@ -126,12 +135,14 @@ service cloud.firestore {
     match /notifications/{notificationId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn();
-      allow update, delete: if isAdmin();
+      allow update: if isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(["read"]);
+      allow delete: if isAdmin();
     }
 
     // ---------- contact form submissions ----------
     match /contactSubmissions/{submissionId} {
-      allow create: if true;
+      allow create: if true; // public contact form, no login required
       allow read, update, delete: if isAdmin();
     }
 

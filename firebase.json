@@ -1,7 +1,7 @@
 {
   "hosting": {
     "site": "realistic-market-show",
-    "public": ".",
+    "public": "www",
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -12,8 +12,7 @@
       "capacitor.config.json",
       "package.json",
       "package-lock.json",
-      "android/**",
-      "www/**"
+      "android/**"
     ]
   },
   "functions": [
@@ -30,4 +29,8 @@
       ]
     }
   ]
+  ,
+  "firestore": {
+    "rules": "www/firestore.rules"
+  }
 }

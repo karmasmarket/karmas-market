@@ -173,6 +173,14 @@ letter-spacing:0.5px;
 }
 .footer-links a:hover{ text-decoration:underline; }
 
+/* BOTTOM NAV ACTIVE STATE
+   (home.html's bottom nav buttons use class="nav-btn",
+   matching Section B's .bottom-nav button rules in style.css) */
+.nav-btn.active{
+color:gold;
+font-weight:bold;
+}
+
 @media(max-width:768px){
 .grid{ grid-template-columns:1fr; }
 header h1{ font-size:24px; }
@@ -184,6 +192,14 @@ header h1{ font-size:24px; }
 
 <body>
 
+<!-- Adsterra Native Ads Script -->
+<script async="async" data-cfasync="false" src="https://pl30541995.effectivecpmnetwork.com/ba412831484dd0827a150e9a4645fa70/invoke.js"></script>
+
+<!-- Adsterra Popunder Ads Script -->
+<script src="https://pl30541994.effectivecpmnetwork.com/2e/03/4f/2e034fc940bd1782c5e0bc50f9c770ec.js"></script>
+
+<!-- Adsterra Social Bar Ads Script -->
+<script src="https://pl30541993.effectivecpmnetwork.com/cb/4b/e7/cb4be78a7f35b22b051cd58fc012b628.js"></script>
 <!-- =====================
      SPLASH / LOADER
      (replaces old loader — shows logo on app open)
@@ -306,11 +322,10 @@ header h1{ font-size:24px; }
     </div>
   </div>
 </header>
-
 <!-- PRODUCTS PAGE -->
 <section id="products" class="page active">
   <h2 class="page-title">Marketplace</h2>
-  <input id="search" class="search" type="text" placeholder="Search products..." onkeyup="searchItems()">
+  <input id="search" class="search" type="text" placeholder="Search products..." onkeyup="searchItems(this.value)">
   <div class="sell-box">
     <h3 style="color:gold;">Post Product</h3>
     <input id="sellerName" placeholder="Seller Name">
@@ -318,9 +333,12 @@ header h1{ font-size:24px; }
     <input id="itemPrice" type="number" placeholder="Price">
     <textarea id="itemDescription" placeholder="Description"></textarea>
     <input id="itemImageFile" type="file" accept="image/*">
-    <button onclick="postItem()">Post Product</button>
+    <button id="postItemBtn" onclick="postItem()">Post Product</button>
   </div>
   <div id="itemFeed" class="grid"></div>
+
+  <!-- Adsterra Native Ad -->
+  <div id="container-ba412831484dd0827a150e9a4645fa70"></div>
 </section>
 
 <!-- SERVICES PAGE -->
@@ -335,6 +353,7 @@ header h1{ font-size:24px; }
     <div class="card"><div class="card-body"><h3>Digital Marketing</h3><p class="small">SEO, social media and advertising campaigns</p><button onclick="openFreelancers('Digital Marketing')">Hire Now</button></div></div>
   </div>
 </section>
+
 <!-- TOOLS PAGE -->
 <section id="tools" class="page">
   <h2 class="page-title">Creator Studio</h2>
@@ -399,7 +418,6 @@ header h1{ font-size:24px; }
   <h3 style="color:gold; margin-top:25px;">Seller Products</h3>
   <div id="sellerProducts" class="grid"></div>
 </section>
-
 <!-- PROMOTION PAGE -->
 <section id="promotionPage" class="page">
   <h2 class="page-title">Affiliate Promotion</h2>
@@ -414,6 +432,11 @@ header h1{ font-size:24px; }
       <option value="Konga">Konga</option>
       <option value="Expertnaire">Expertnaire</option>
       <option value="Other">Other</option>
+    </select>
+    <select id="adPricingTier">
+      <option value="basic">Basic — ₦2,500</option>
+      <option value="standard">Standard — ₦5,000</option>
+      <option value="featured">Featured — ₦10,000</option>
     </select>
     <input type="file" id="affiliateImage" accept="image/*">
     <button onclick="submitPromotion()">Submit Promotion</button>
@@ -439,39 +462,6 @@ header h1{ font-size:24px; }
   <div id="freelancerOrders" class="grid"></div>
 </section>
 
-<!-- FREELANCER REGISTRATION -->
-<section id="freelancerRegisterPage" class="page">
-  <h2 class="page-title">Become a Freelancer</h2>
-  <div class="sell-box">
-    <input id="freelancerName" placeholder="Full Name">
-    <input id="freelancerSkill" placeholder="Skill">
-    <input id="freelancerPrice" placeholder="Starting Price">
-    <input id="freelancerImage" placeholder="Profile Image URL">
-    <textarea id="freelancerBio" placeholder="Bio"></textarea>
-    <button onclick="createFreelancerProfile()">Create Freelancer Profile</button>
-  </div>
-</section>
-
-<!-- CLIENT REGISTRATION -->
-<section id="clientRegisterPage" class="page">
-  <h2 class="page-title">Client Registration</h2>
-  <div class="sell-box">
-    <input id="clientName" placeholder="Full Name">
-    <input id="clientBusiness" placeholder="Business Name">
-    <button onclick="createClientProfile()">Create Client Profile</button>
-  </div>
-</section>
-<!-- ROLE SELECTION PAGE -->
-<section id="roleSelectionPage" class="page">
-  <h2 class="page-title">Choose Your Role</h2>
-  <div class="grid">
-    <div class="card"><div class="card-body"><h3>Freelancer</h3><p class="small">Sell your services</p><button onclick="selectRole('freelancer')">Continue</button></div></div>
-    <div class="card"><div class="card-body"><h3>Client</h3><p class="small">Hire freelancers</p><button onclick="selectRole('client')">Continue</button></div></div>
-  </div>
-  <div id="freelancerForm" style="display:none;"><br><button onclick="showPage('freelancerRegisterPage')">Open Freelancer Registration</button></div>
-  <div id="clientForm" style="display:none;"><br><button onclick="showPage('clientRegisterPage')">Open Client Registration</button></div>
-</section>
-
 <!-- APP MARKETPLACE -->
 <section id="appMarketplace" class="page">
   <h2 class="page-title">Developer Marketplace</h2>
@@ -489,18 +479,59 @@ header h1{ font-size:24px; }
   <div id="appFeed" class="grid"></div>
 </section>
 
-<!-- CHAT PAGE -->
+<!-- =====================================================
+     CHAT PAGE — FACEBOOK / MESSENGER MOBILE STYLE
+     Single full-screen conversation (list lives on
+     conversationsPage — tap a chat there to land here).
+     Uses .chat-window / .chat-header / .chat-user-avatar /
+     .messages / .message.sent / .message.received /
+     .chat-input / .chat-send-btn from style.css Section F.
+===================================================== -->
 <section id="chatPage" class="page">
-  <h2 class="page-title">Live Chat</h2>
-  <div id="chatMessages" class="chat-box"></div>
-  <input id="chatInput" class="search" placeholder="Type your message...">
-  <button onclick="sendMessage()">Send Message</button>
-</section>
 
-<!-- CONVERSATIONS PAGE -->
+  <div class="chat-window" style="max-width:900px; margin:10px auto 0; min-height:80vh;">
+
+    <div class="chat-header">
+      <button onclick="showPage('conversationsPage')" style="width:auto; padding:8px 16px; margin:0;">←</button>
+      <img class="chat-user-avatar" id="chatHeaderAvatar"
+           src="https://api.dicebear.com/7.x/initials/svg?seed=Seller" alt="Avatar">
+      <div class="chat-user-info">
+        <h3 id="chatHeaderName">Seller</h3>
+        <span class="chat-user-status online" id="chatHeaderStatus">● Active</span>
+      </div>
+    </div>
+
+    <div id="chatMessages" class="messages">
+      <p style="color:#94a3b8; text-align:center; padding:20px;">Start a conversation</p>
+    </div>
+
+    <div class="chat-input">
+      <input id="chatInput" type="text" placeholder="Type a message...">
+      <button class="chat-send-btn" onclick="sendMessage()">Send</button>
+    </div>
+
+  </div>
+
+</section>
+<!-- =====================================================
+     CONVERSATIONS PAGE — FACEBOOK / MESSENGER STYLE
+     Full chat list. Tapping a conversation-item calls
+     openConversation() (app.js) which switches to chatPage.
+     Uses .conversation-list / .conversation-header /
+     .conversation-item / .conversation-avatar /
+     .conversation-info from style.css Section F.
+===================================================== -->
 <section id="conversationsPage" class="page">
-  <h2 class="page-title">Conversations</h2>
-  <div id="conversationList" style="display:flex; flex-direction:column; gap:15px;"></div>
+
+  <h2 class="page-title">Messages</h2>
+
+  <div class="conversation-list" style="max-width:900px; margin:0 auto;">
+    <div class="conversation-header">
+      <h2>Active Chats</h2>
+    </div>
+    <div id="conversationList"></div>
+  </div>
+
 </section>
 
 <!-- NOTIFICATIONS PAGE -->
@@ -509,35 +540,104 @@ header h1{ font-size:24px; }
   <div id="notificationFeed" style="display:flex; flex-direction:column; gap:15px;"></div>
 </section>
 
-<!-- ORDERS PAGE -->
+<!-- =====================================================
+     ORDERS PAGE — REDESIGNED
+     ordersFeed ID unchanged; app.js's loadOrders() now
+     renders styled status badges instead of plain text.
+===================================================== -->
 <section id="ordersPage" class="page">
   <h2 class="page-title">Orders</h2>
   <div id="ordersFeed" class="grid"></div>
 </section>
 
-<!-- WALLET PAGE -->
+<!-- =====================================================
+     WALLET PAGE — REDESIGNED
+     Uses existing .wallet-container / .wallet-card /
+     .wallet-balance / .wallet-actions classes.
+     walletBalance ID unchanged so loadWallet() in app.js
+     needs zero changes.
+===================================================== -->
 <section id="walletPage" class="page">
-  <h2 class="page-title">Wallet</h2>
-  <div class="profile-box">
-    <h3 style="color:gold;">Available Balance</h3>
-    <h1 id="walletBalance" style="margin-top:15px; color:gold;">₦0</h1>
-    <button onclick="withdrawWallet()">Withdraw Funds</button>
+
+  <div class="wallet-container">
+    <div class="wallet-card">
+      <h2>Available Balance</h2>
+      <div class="wallet-balance" id="walletBalance">₦0</div>
+      <p class="wallet-label">Withdraw anytime to your Nigerian bank account</p>
+      <div class="wallet-actions">
+        <button class="withdraw-btn" onclick="showWithdrawalForm()" style="margin:0;">Request Withdrawal</button>
+      </div>
+    </div>
   </div>
+
 </section>
 
-<!-- ANALYTICS PAGE -->
-<section id="analyticsPage" class="page">
-  <h2 class="page-title">Marketplace Analytics</h2>
-  <div class="grid">
-    <div class="card"><div class="card-body"><h3>Total Products</h3><h1 id="totalProducts" style="color:gold;">0</h1></div></div>
-    <div class="card"><div class="card-body"><h3>Total Freelancers</h3><h1 id="totalFreelancers" style="color:gold;">0</h1></div></div>
-    <div class="card"><div class="card-body"><h3>Total Apps</h3><h1 id="totalApps" style="color:gold;">0</h1></div></div>
-    <div class="card"><div class="card-body"><h3>Total Orders</h3><h1 id="totalOrders" style="color:gold;">0</h1></div></div>
-    <div class="card"><div class="card-body"><h3>Total Revenue</h3><h1 id="totalRevenue" style="color:gold;">₦0</h1></div></div>
-    <div class="card"><div class="card-body"><h3>Affiliate Clicks</h3><h1 id="totalClicks" style="color:gold;">0</h1></div></div>
+<!-- =====================================================
+     WITHDRAWAL PAGE — REDESIGNED
+     Form field IDs unchanged (withdrawAmount, bankSelect,
+     accountNumber, accountName) so requestWithdrawal() and
+     loadBankList() in app.js work with zero changes.
+     withdrawalHistory ID unchanged; app.js's
+     loadWithdrawalHistory() now renders into .transaction
+     markup instead of inline-styled divs.
+===================================================== -->
+<section id="withdrawalPage" class="page">
+
+  <button onclick="showPage('walletPage')" style="width:auto; padding:8px 16px;">← Back</button>
+  <h2 class="page-title">Request Withdrawal</h2>
+
+  <div class="sell-box">
+
+    <label style="display:block; margin-bottom:5px; color:#bbb; font-size:12px;">Amount (₦)</label>
+    <input id="withdrawAmount" type="number" placeholder="Enter amount" min="1000">
+    <p class="small" style="margin-top:-4px; margin-bottom:10px;">Minimum: ₦1,000</p>
+
+    <label style="display:block; margin-bottom:5px; color:#bbb; font-size:12px;">Bank</label>
+    <select id="bankSelect">
+      <option value="">Loading banks...</option>
+    </select>
+
+    <label style="display:block; margin-bottom:5px; color:#bbb; font-size:12px;">Account Number</label>
+    <input id="accountNumber" type="text" placeholder="10-digit account number" maxlength="10">
+
+    <label style="display:block; margin-bottom:5px; color:#bbb; font-size:12px;">Account Name</label>
+    <input id="accountName" type="text" placeholder="Name on account">
+
+    <button class="btn-primary" onclick="requestWithdrawal()">Request Withdrawal</button>
+
   </div>
-  <br>
-  <canvas id="analyticsChart" height="120"></canvas>
+
+  <div class="transactions">
+    <h3>Withdrawal History</h3>
+    <div id="withdrawalHistory"></div>
+  </div>
+
+</section>
+
+<!-- =====================================================
+     ANALYTICS PAGE — REDESIGNED
+     Uses existing .analytics-grid / .analytics-card /
+     .analytics-value classes. All IDs unchanged so
+     app.js's loadTotal*() functions need zero changes.
+===================================================== -->
+<section id="analyticsPage" class="page">
+
+  <h2 class="page-title">Marketplace Analytics</h2>
+
+  <div class="analytics-grid">
+    <div class="analytics-card"><h3>Total Products</h3><div class="analytics-value" id="totalProducts">0</div></div>
+    <div class="analytics-card"><h3>Total Freelancers</h3><div class="analytics-value" id="totalFreelancers">0</div></div>
+    <div class="analytics-card"><h3>Total Apps</h3><div class="analytics-value" id="totalApps">0</div></div>
+    <div class="analytics-card"><h3>Total Orders</h3><div class="analytics-value" id="totalOrders">0</div></div>
+    <div class="analytics-card"><h3>Total Revenue</h3><div class="analytics-value" id="totalRevenue">₦0</div></div>
+    <div class="analytics-card"><h3>Affiliate Clicks</h3><div class="analytics-value" id="totalClicks">0</div></div>
+  </div>
+
+  <div class="chart-container">
+    <h3>Marketplace Stats</h3>
+    <canvas id="analyticsChart" height="120"></canvas>
+  </div>
+
 </section>
 
 <!-- PROFILE PAGE -->
@@ -669,7 +769,6 @@ header h1{ font-size:24px; }
     <p class="small">Firebase and Flutterwave may set their own cookies which we do not control.</p>
   </div>
 </section>
-
 <!-- REFUND POLICY -->
 <section id="refundPage" class="page">
   <h2 class="page-title">Refund Policy</h2>
@@ -685,7 +784,6 @@ header h1{ font-size:24px; }
     <p class="small">Approved refunds are returned to your Karmas Wallet within 5-7 business days.</p>
   </div>
 </section>
-
 <!-- SELLER POLICY -->
 <section id="sellerPolicyPage" class="page">
   <h2 class="page-title">Seller Policy</h2>
@@ -801,6 +899,7 @@ header h1{ font-size:24px; }
   <button class="nav-btn" onclick="showPage('appMarketplace',this)">Apps</button>
   <button class="nav-btn" onclick="showPage('profile',this)">Profile</button>
 </div>
+
 <!-- ONBOARDING SCREEN -->
 <div id="onboarding" style="position:fixed; top:0; left:0; width:100%; height:100vh; background:#060e1e; z-index:999999; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:30px; text-align:center;">
 
@@ -854,21 +953,11 @@ function showPage(id, btn){
   document.querySelectorAll(".nav-btn").forEach(button => button.classList.remove("active"));
   if(btn){ btn.classList.add("active"); }
   window.scrollTo({ top:0, behavior:"smooth" });
-}
 
-function submitContact(){
-  const name = document.getElementById("contactName").value;
-  const email = document.getElementById("contactEmail").value;
-  const message = document.getElementById("contactMessage").value;
-  if(!name || !email || !message){
-    document.getElementById("contactResult").innerHTML = "⚠️ Please fill in all fields.";
-    return;
+  if(id === "withdrawalPage"){
+    if(typeof loadBankList === "function") loadBankList();
+    if(typeof loadWithdrawalHistory === "function") loadWithdrawalHistory();
   }
-  document.getElementById("contactResult").innerHTML =
-    "✅ Thank you " + name + "! We'll get back to you at " + email + " within 24 hours.";
-  document.getElementById("contactName").value = "";
-  document.getElementById("contactEmail").value = "";
-  document.getElementById("contactMessage").value = "";
 }
 
 window.addEventListener("load", () => {
@@ -898,7 +987,7 @@ const db = firebase.firestore();
 const storage = firebase.storage();
 </script>
 
-<script src="app.js"></script>
+<script src="app.js?v=4"></script>
 
 </body>
 </html>

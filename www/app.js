@@ -1,339 +1,170 @@
 /* ==================================
-
 GLOBAL VARIABLES
-
 ================================== */
-
 console.log("APP.JS LOADED - CLEAN VERSION");
 
-
-
 let currentChatId = null;
-
 let currentItemId = null;
-
 let currentSeller = "";
-
 let messaging = null;
-
 let analyticsChart = null;
 
-
-
 try{
-
     if(firebase.messaging){
-
         messaging = firebase.messaging();
-
     }
-
 }catch(error){
-
     console.log("Messaging not available", error);
-
 }
 
-
-
 /* ==================================
-
 ADMIN CONFIGURATION
-
 ================================== */
 
-
-
-const ADMIN_EMAIL = "karmaking426@gmail.com";
-
-
+const ADMIN_EMAIL = "musaabdullahi20001@gmail.com";
 
 function isAdmin(){
-
     const user = auth.currentUser;
-
     return !!(user && user.email === ADMIN_EMAIL);
-
 }
-
-
 
 function requireAdmin(){
-
     if(!isAdmin()){
-
         alert("Access denied. Admins only.");
-
         return false;
-
     }
-
     return true;
-
 }
 
-
-
 /* ==================================
-
 AUDIT LOGGING
-
 Records fraud-relevant actions (admin
-
 moderation, listing deletions, escrow
-
 releases, withdrawals, logins) to a
-
 dedicated Firestore collection, so
-
 there's a permanent trail if something
-
 is ever disputed or investigated.
-
 This never blocks or fails the action
-
 it's logging — if writing the log
-
 itself fails, that failure is only
-
 logged to the console, not shown to
-
 the user.
-
 ================================== */
-
-
 
 function logAuditEvent(action, details){
 
-
-
     try{
-
-
 
         const user = auth.currentUser;
 
-
-
         db.collection("auditLogs").add({
-
             action: action,
-
             performedByEmail: user ? user.email : "system",
-
             performedByUid: user ? user.uid : null,
-
             isAdminAction: isAdmin(),
-
             details: details || {},
-
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
-
         }).catch(error=>{
-
             console.log("Audit log write failed:", error);
-
         });
 
-
-
     }catch(error){
-
         console.log("Audit log error:", error);
-
     }
-
-
 
 }
 
-
-
 /* ==================================
-
 COMMISSION ENGINE
-
 (Tiered structure — applies to both
-
 product sales and freelancer hires)
-
 ================================== */
-
-
 
 function getCommissionRate(price){
 
-
-
     const amount = Number(price);
 
-
-
     if(amount <= 20000) return 0.10;
-
     if(amount <= 100000) return 0.08;
-
     if(amount <= 500000) return 0.06;
-
     if(amount <= 2000000) return 0.04;
-
-
 
     return 0.03; // above ₦2,000,000
 
-
-
 }
-
-
 
 function calculateCommission(price){
 
-
-
     const amount = Number(price);
-
     const rate = getCommissionRate(amount);
-
-
 
     return Math.round(amount * rate);
 
-
-
 }
 
-
-
 /* ==================================
-
 AUTH PERSISTENCE
-
 (keeps users logged in across brief
-
 network drops instead of forcing
-
 re-auth on every hiccup)
-
 ================================== */
-
-
 
 try{
-
     auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL);
-
 }catch(error){
-
     console.log("Persistence setup error:", error);
-
 }
 
-
-
 /* ==================================
-
 AUTH STATE
-
 ================================== */
-
-
 
 auth.onAuthStateChanged((user)=>{
 
-
-
     const userEmail = document.getElementById("userEmail");
-
     const userStatus = document.getElementById("userStatus");
-
-
 
     if(user){
 
-
-
         if(userEmail){
-
             userEmail.innerText = user.email;
-
         }
-
-
 
         if(userStatus){
-
             userStatus.innerText = "Logged in: " + user.email;
-
         }
-
-
 
         // Route to the right default tab based on account role, once per
-
         // page load. Sellers already land on Products (hardcoded active
-
         // in home.html), but freelancers were also landing on Products
-
         // first — which meant a freelancer's own listings/pricing info
-
         // could look like it was mixed in with the general product feed.
-
         // This sends freelancers straight to Services instead. It only
-
         // runs once so it never fights with the user's own navigation
-
         // afterward.
-
         if(!window.hasAppliedRoleLanding){
-
             window.hasAppliedRoleLanding = true;
 
-
-
             db.collection("users").doc(user.uid).get().then(doc=>{
-
                 if(doc.exists && doc.data().role === "freelancer"){
-
                     const servicesBtn = Array.from(document.querySelectorAll(".nav-btn"))
-
                         .find(btn => btn.getAttribute("onclick") && btn.getAttribute("onclick").includes("'services'"));
-
                     showPage("services", servicesBtn);
-
                 }
-
             }).catch(error=>{
-
                 console.log("Role landing check failed:", error);
-
             });
-
         }
-
-
 
     }else{
 
-
-
         if(userStatus){
-
             userStatus.innerText = "Not logged in";
-
         }
-
-
 
     }
 
-
-
 });
-
-
-
 /* ==================================
 
 INPUT SANITIZATION
@@ -837,17 +668,28 @@ function searchApps(value){
 
 
 }
+
+
+
 /* ==================================
+
 LOADER / ONBOARDING
+
 ================================== */
 
-function closeOnboarding(){
-    const onboarding = document.getElementById("onboarding");
-    if(onboarding){
-        onboarding.style.display = "none";
-    }
-}
 
+
+function closeOnboarding(){
+
+    const onboarding = document.getElementById("onboarding");
+
+    if(onboarding){
+
+        onboarding.style.display = "none";
+
+    }
+
+}
 /* ==================================
 NOTIFICATIONS
 ================================== */
@@ -1270,7 +1112,7 @@ function displayItems(){
         snapshot.forEach(doc=>{
 
             const item = doc.data();
-            const isOwner = currentUser && currentUser.email === item.sellerEmail;
+            const isOwner = currentUser && (currentUser.email === item.sellerEmail || (!item.sellerEmail && isAdmin()));
 
             feed.innerHTML += `
             <div class="card" id="item-${doc.id}">
@@ -1350,7 +1192,7 @@ async function deleteItem(itemId){
 
         const item = docSnap.data();
 
-        if(item.sellerEmail !== user.email){
+        if(item.sellerEmail !== user.email && !(!item.sellerEmail && isAdmin())){
             alert("You can only delete your own listings.");
             return;
         }
@@ -1945,7 +1787,6 @@ function approveOrder(orderId){
     });
 
 }
-
 /* ==================================
 CHAT SYSTEM (privacy-filtered)
 Renders into the Messenger-style markup
@@ -1970,8 +1811,16 @@ function openChat(itemId, sellerEmail){
     // so it matches what's stored in Firestore's "participants" array below.
     // Using a display name here was the root cause of messages never
     // reaching the seller's inbox.
-    currentChatId = itemId + "_" + sellerEmail;
-    currentSeller = sellerEmail;
+    //
+    // Legacy listings created before sellerEmail was added to the schema
+    // have no sellerEmail at all - without this fallback, chatId would be
+    // built as "itemId_undefined" and the conversation would silently never
+    // reach the real owner's inbox (same root cause as the old delete-button
+    // bug on legacy items). Route those chats to the admin email instead.
+    const resolvedSellerEmail = sellerEmail || ADMIN_EMAIL;
+
+    currentChatId = itemId + "_" + resolvedSellerEmail;
+    currentSeller = resolvedSellerEmail;
 
     showPage("chatPage");
     updateChatHeader(sellerEmail);
@@ -2322,7 +2171,9 @@ function loadSellerProducts(sellerName){
             // This is the public seller-profile view, so the delete button
             // is only shown when the person viewing it is the owner —
             // everyone else just sees the listing with no delete control.
-            const isOwner = currentUser && currentUser.email === item.sellerEmail;
+            // Fallback: legacy listings created before sellerEmail existed have
+            // no such field at all — let the admin account manage those too.
+            const isOwner = currentUser && (currentUser.email === item.sellerEmail || (!item.sellerEmail && isAdmin()));
 
             container.innerHTML += `
             <div class="card">
@@ -2800,6 +2651,7 @@ function loadFeaturedApps(){
     });
 
 }
+
 /* ==================================
 AFFILIATE / SPONSORED ADS
 ================================== */
@@ -3343,7 +3195,6 @@ function loadTemplates(){
     });
 
 }
-
 /* ==================================
 CONTACT FORM
 ================================== */
@@ -3381,6 +3232,7 @@ function submitContact(){
     });
 
 }
+
 /* ==================================
 ADMIN — USERS
 ================================== */
@@ -3668,6 +3520,7 @@ function loadAuditLogs(){
     });
 
 }
+
 /* ==================================
 ADMIN — REVENUE / ANALYTICS
 ================================== */
@@ -4112,8 +3965,6 @@ function loadWithdrawalHistory(){
     });
 
 }
-
-
 /* ==================================
 APP INITIALIZATION
 ================================== */
