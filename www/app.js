@@ -165,531 +165,345 @@ auth.onAuthStateChanged((user)=>{
     }
 
 });
+
 /* ==================================
-
 INPUT SANITIZATION
-
 Strips HTML tags from user-supplied
-
 text before it's ever written to
-
 Firestore, so stored data can't carry
-
 a script/markup injection payload.
-
 Apply this to any free-text field
-
 before saving (messages, reviews,
-
 product titles/descriptions, contact
-
 form, promo text, etc).
-
 ================================== */
-
-
 
 function sanitizeText(value){
 
-
-
     if(value === null || value === undefined) return "";
 
-
-
     return String(value)
-
         .replace(/<[^>]*>/g, "")   // strip HTML tags
-
         .replace(/[<>]/g, "")      // strip any stray angle brackets
-
         .trim();
-
-
 
 }
 
-
-
 /* ==================================
-
 LOGIN RATE LIMITING
-
 Simple client-side cooldown: blocks
-
 rapid repeated login attempts to slow
-
 down brute-force guessing. This is a
-
 first line of defense only — it does
-
 not replace Firebase App Check or
-
 server-side throttling.
-
 ================================== */
 
-
-
 const LOGIN_MAX_ATTEMPTS = 5;
-
 const LOGIN_WINDOW_MS = 60000; // 1 minute
-
 let loginAttempts = [];
-
-
 
 function isLoginRateLimited(){
 
-
-
     const now = Date.now();
-
-
 
     loginAttempts = loginAttempts.filter(t => now - t < LOGIN_WINDOW_MS);
 
-
-
     if(loginAttempts.length >= LOGIN_MAX_ATTEMPTS){
-
         return true;
-
     }
 
-
-
     loginAttempts.push(now);
-
     return false;
-
-
 
 }
 
-
-
 /* ==================================
-
 NETWORK / AUTH ERROR MESSAGING
-
 Translates raw Firebase error codes
-
 into messages a non-technical user
-
 can actually act on.
-
 ================================== */
-
-
 
 function friendlyAuthError(error){
 
-
-
     const code = error && error.code ? error.code : "";
 
-
-
     if(!navigator.onLine){
-
         return "You appear to be offline. Please check your internet connection and try again.";
-
     }
-
-
 
     switch(code){
-
         case "auth/network-request-failed":
-
             return "Connection lost. Please check your internet and try again.";
-
         case "auth/user-not-found":
-
         case "auth/wrong-password":
-
         case "auth/invalid-credential":
-
             return "Incorrect email or password. Please check your details and try again.";
-
         case "auth/too-many-requests":
-
             return "Too many attempts. Please wait a few minutes before trying again.";
-
         case "auth/invalid-email":
-
             return "Please enter a valid email address.";
-
         case "auth/email-already-in-use":
-
             return "An account with this email already exists.";
-
         case "auth/weak-password":
-
             return "Password is too weak. Please use at least 6 characters.";
-
         default:
-
             return error && error.message ? error.message : "Something went wrong. Please try again.";
-
     }
-
-
 
 }
 
-
-
 /* ==================================
-
 SIGN UP / LOGIN / LOGOUT
-
 ================================== */
 
+function generateReferralCode(email){
+    const base = email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 6);
+    const suffix = Math.random().toString(36).slice(2, 6).toUpperCase();
+    return `${base}${suffix}`;
+}
 
+function getReferralCodeFromURL(){
+    const params = new URLSearchParams(window.location.search);
+    return params.get("ref");
+}
 
 function signUp(){
 
-
-
     const email = document.getElementById("email").value.trim();
-
     const password = document.getElementById("password").value;
 
-
-
     if(!email || !password){
-
         alert("Please enter email and password");
-
         return;
-
     }
-
-
 
     if(!navigator.onLine){
-
         alert("You're offline. Please check your internet connection and try again.");
-
         return;
-
     }
 
-
-
     auth.createUserWithEmailAndPassword(email, password)
+    .then((result)=>{
 
-    .then(()=>{
+        const referralCode = generateReferralCode(email);
+        const referredByCode = getReferralCodeFromURL();
 
-        alert("Account created successfully");
+        const userDoc = {
+            email: email,
+            referralCode: referralCode,
+            createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+            referralRewardGiven: false
+        };
+
+        const finalizeSignup = ()=>{
+            return db.collection("users").doc(result.user.uid).set(userDoc, { merge:true });
+        };
+
+        if(referredByCode){
+            db.collection("users")
+            .where("referralCode", "==", referredByCode)
+            .limit(1)
+            .get()
+            .then(snapshot=>{
+                if(!snapshot.empty){
+                    const referrer = snapshot.docs[0];
+                    if(referrer.id !== result.user.uid){
+                        userDoc.referredBy = referrer.id;
+                        userDoc.referredByEmail = referrer.data().email || null;
+                    }
+                }
+                return finalizeSignup();
+            })
+            .then(()=>{
+                alert("Account created successfully");
+            })
+            .catch(error=>{
+                console.log("Referral lookup failed, continuing signup:", error);
+                finalizeSignup().then(()=>alert("Account created successfully"));
+            });
+        }else{
+            finalizeSignup().then(()=>{
+                alert("Account created successfully");
+            });
+        }
 
     })
-
     .catch(error=>{
-
         alert(friendlyAuthError(error));
-
     });
 
-
-
 }
-
-
 
 function login(){
 
-
-
     const email = document.getElementById("email").value.trim();
-
     const password = document.getElementById("password").value;
 
-
-
     if(!email || !password){
-
         alert("Please enter email and password");
-
         return;
-
     }
-
-
 
     if(isLoginRateLimited()){
-
         alert("Too many login attempts. Please wait a minute before trying again.");
-
         return;
-
     }
-
-
 
     if(!navigator.onLine){
-
         alert("You're offline. Please check your internet connection and try again.");
-
         return;
-
     }
 
-
-
     // Safety timeout: if Firebase hangs longer than expected on a flaky
-
     // connection, tell the user instead of leaving them stuck with no feedback.
-
     let settled = false;
-
     const timeoutId = setTimeout(()=>{
-
         if(!settled){
-
             alert("This is taking longer than usual. Please check your connection and try again.");
-
         }
-
     }, 10000);
 
-
-
     auth.signInWithEmailAndPassword(email, password)
-
     .then(async (result)=>{
-
         settled = true;
-
         clearTimeout(timeoutId);
-
-
 
         // Force a brand new ID token immediately after sign-in, discarding
-
         // anything cached from a previous session on this browser/device.
-
         // Without this, switching between two different accounts on the
-
         // same browser (e.g. testing a seller account then a freelancer
-
         // account) can leave a stale token in memory whose email claim
-
         // doesn't match the account that just signed in — every Firestore
-
         // rule checking request.auth.token.email then fails with
-
         // "Missing or insufficient permissions" even though the user is
-
         // genuinely logged in correctly.
-
         try{
-
             await result.user.getIdToken(true);
-
         }catch(tokenError){
-
             console.log("Token refresh after login failed:", tokenError);
-
         }
 
-
-
         logAuditEvent("login", { email: email });
-
         window.location.href = "home.html";
-
     })
-
     .catch(error=>{
-
         settled = true;
-
         clearTimeout(timeoutId);
-
         alert(friendlyAuthError(error));
-
     });
 
-
-
 }
-
-
 
 function logout(){
 
-
-
     const loggingOutUser = auth.currentUser;
 
-
-
     auth.signOut()
-
     .then(()=>{
-
         if(loggingOutUser){
-
             logAuditEvent("logout", { email: loggingOutUser.email });
-
         }
-
         window.location.href = "index.html";
-
     })
-
     .catch(error=>{
-
         alert(friendlyAuthError(error));
-
     });
 
-
-
 }
-
 /* ==================================
-
 PAGE NAVIGATION
-
 ================================== */
-
-
 
 function showPage(id, btn){
 
-
-
     document.querySelectorAll(".page").forEach(page=>{
-
         page.classList.remove("active");
-
     });
-
-
 
     const page = document.getElementById(id);
-
     if(page){
-
         page.classList.add("active");
-
     }
-
-
 
     document.querySelectorAll(".nav-btn").forEach(nav=>{
-
         nav.classList.remove("active");
-
     });
 
-
-
     if(btn){
-
         btn.classList.add("active");
-
     }
-
-
 
     window.scrollTo({ top:0, behavior:"smooth" });
 
-
-
     if(id === "withdrawalPage"){
-
         if(typeof loadBankList === "function") loadBankList();
-
         if(typeof loadWithdrawalHistory === "function") loadWithdrawalHistory();
-
     }
-
-
 
 }
 
-
-
 /* ==================================
-
 SEARCH
-
 ================================== */
 
-
+// The product feed is redrawn live by displayItems()'s onSnapshot
+// listener every time Firestore data changes, which was wiping out
+// whatever the search box had hidden a moment earlier - that's why
+// the search bar looked broken. Storing the current search term and
+// re-applying it after every redraw fixes this.
+let currentItemSearchTerm = "";
 
 function searchItems(value){
 
+    currentItemSearchTerm = value.toLowerCase();
+    applyItemSearchFilter();
 
+}
 
-    const search = value.toLowerCase();
+function applyItemSearchFilter(){
+
+    if(!currentItemSearchTerm){
+        document.querySelectorAll("#itemFeed .card").forEach(card=>{
+            card.style.display = "block";
+        });
+        return;
+    }
 
     const cards = document.querySelectorAll("#itemFeed .card");
 
-
-
     cards.forEach(card=>{
-
-        const title = card.querySelector("h3").innerText.toLowerCase();
-
-        card.style.display = title.includes(search) ? "block" : "none";
-
+        const titleEl = card.querySelector("h3");
+        if(!titleEl) return;
+        const title = titleEl.innerText.toLowerCase();
+        card.style.display = title.includes(currentItemSearchTerm) ? "block" : "none";
     });
 
-
-
 }
-
-
 
 function searchApps(value){
 
-
-
     const keyword = value.toLowerCase();
-
     const cards = document.querySelectorAll("#appFeed .card");
 
-
-
     cards.forEach(card=>{
-
         const title = card.querySelector("h3").innerText.toLowerCase();
-
         card.style.display = title.includes(keyword) ? "block" : "none";
-
     });
 
-
-
 }
-
-
-
 /* ==================================
-
 LOADER / ONBOARDING
-
 ================================== */
 
-
-
 function closeOnboarding(){
-
     const onboarding = document.getElementById("onboarding");
-
     if(onboarding){
-
         onboarding.style.display = "none";
-
     }
-
 }
+
 /* ==================================
 NOTIFICATIONS
 ================================== */
@@ -912,442 +726,886 @@ async function clearNotifications(){
 
 }
 /* ==================================
+
 PRODUCT POSTING
+
 ================================== */
+
+
 
 async function postItem(){
 
+
+
     const user = auth.currentUser;
 
+
+
     if(!user){
+
         alert("Please login first");
+
         return;
+
     }
+
+
 
     const seller = sanitizeText(document.getElementById("sellerName").value);
+
     const title = sanitizeText(document.getElementById("itemTitle").value);
+
     const price = document.getElementById("itemPrice").value.trim();
+
     const description = sanitizeText(document.getElementById("itemDescription").value);
+
     const imageFile = document.getElementById("itemImageFile").files[0];
 
+
+
     if(!seller || !title || !price || !description || !imageFile){
+
         alert("Please fill all fields");
+
         return;
+
     }
+
+
 
     // Basic server-independent validation: reject obviously wrong file types/sizes
+
     // before spending an upload request on them. Cloudinary still enforces its own
+
     // rules on the backend, but this saves the user a failed round-trip.
+
     const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
     const maxSizeBytes = 8 * 1024 * 1024; // 8MB
 
+
+
     if(!allowedTypes.includes(imageFile.type)){
+
         alert("Please upload a JPG, PNG, WEBP or GIF image.");
+
         return;
+
     }
+
+
 
     if(imageFile.size > maxSizeBytes){
+
         alert("Image is too large. Please upload an image under 8MB.");
+
         return;
+
     }
 
+
+
     const postBtn = document.getElementById("postItemBtn");
+
     const setBtnState = (text, disabled)=>{
+
         if(postBtn){ postBtn.textContent = text; postBtn.disabled = disabled; }
+
     };
 
+
+
     // Uploads to Cloudinary using XHR (not fetch) so we get real upload
+
     // progress events, and wraps it with a 60s timeout — slow mobile
+
     // networks in Nigeria/India need much more headroom than a typical
+
     // fetch default. One automatic silent retry on network failure
+
     // covers the common case of a single dropped packet/hiccup.
+
     function uploadImage(file, attempt){
+
         return new Promise((resolve, reject)=>{
 
+
+
             const xhr = new XMLHttpRequest();
+
             const formData = new FormData();
+
             formData.append("file", file);
+
             formData.append("upload_preset", "karmas.ng");
 
+
+
             xhr.open("POST", "https://api.cloudinary.com/v1_1/djrijnh6c/image/upload");
+
             xhr.timeout = 60000; // 60 seconds — was failing too early on slow connections
 
+
+
             xhr.upload.onprogress = (e)=>{
+
                 if(e.lengthComputable){
+
                     const pct = Math.round((e.loaded / e.total) * 100);
+
                     setBtnState(`Uploading image... ${pct}%`, true);
+
                 }
+
             };
+
+
 
             xhr.onload = ()=>{
+
                 try{
+
                     const data = JSON.parse(xhr.responseText);
+
                     if(xhr.status >= 200 && xhr.status < 300 && data.secure_url){
+
                         resolve(data);
+
                     }else{
+
                         reject(new Error("Image upload failed"));
+
                     }
+
                 }catch(e){
+
                     reject(new Error("Image upload failed"));
+
                 }
+
             };
 
+
+
             xhr.ontimeout = ()=> reject(new Error("TIMEOUT"));
+
             xhr.onerror = ()=> reject(new Error("NETWORK"));
+
+
 
             xhr.send(formData);
 
+
+
         }).catch(err=>{
+
             // One silent retry for network-type failures only (not for
+
             // validation-type rejections), so a single bad moment on a
+
             // weak connection doesn't force the user to redo the whole form.
+
             if(attempt === 1 && (err.message === "TIMEOUT" || err.message === "NETWORK")){
+
                 setBtnState("Connection hiccup, retrying...", true);
+
                 return uploadImage(file, 2);
+
             }
+
             throw err;
+
         });
+
     }
+
+
 
     try{
 
+
+
         if(!navigator.onLine){
+
             alert("You're offline. Please check your connection and try again.");
+
             return;
+
         }
+
+
 
         setBtnState("Uploading image... 0%", true);
 
+
+
         const data = await uploadImage(imageFile, 1);
+
+
 
         setBtnState("Saving product...", true);
 
+
+
         // The image is already safely uploaded to Cloudinary at this point —
+
         // we must not make the user re-upload it just because the Firestore
+
         // write hiccups. This retries the save (not the image) up to 3 times
+
         // with a short growing delay, which covers the common case on weak
+
         // networks: the auth token silently failed to refresh mid-flow and
+
         // the write throws "unavailable" / "network-request-failed" / a
+
         // generic permission-looking error even though the rules are fine.
+
         async function saveItemWithRetry(attempt){
+
             try{
+
                 const newItemRef = await db.collection("items").add({
 
+
+
                     seller,
+
                     sellerEmail: user.email,
+
                     title,
+
                     price: Number(price),
+
                     description,
+
                     imageUrl: data.secure_url,
+
                     featured:false,
+
                     promoted:false,
+
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
 
+
+
                 });
+
                 return newItemRef;
+
             }catch(err){
+
                 const isNetworkish =
+
                     err.code === "unavailable" ||
+
                     err.code === "auth/network-request-failed" ||
+
                     err.message?.includes("network") ||
+
                     !navigator.onLine;
 
+
+
                 if(isNetworkish && attempt < 3){
+
                     setBtnState(`Connection hiccup, retrying (${attempt}/3)...`, true);
+
                     // Give the token/network a moment to recover before trying again.
+
                     await new Promise(r => setTimeout(r, 1500 * attempt));
+
                     // Force a fresh ID token before retrying — if the token
+
                     // refresh itself was what failed, this clears it out.
+
                     try{ await user.getIdToken(true); }catch(_){}
+
                     return saveItemWithRetry(attempt + 1);
+
                 }
+
                 throw err;
+
             }
+
         }
+
+
 
         const newItemRef = await saveItemWithRetry(1);
 
+
+
         sendDealNotification(title, price, newItemRef ? newItemRef.id : null);
+
+
 
         alert("Product Posted Successfully");
 
+
+
         document.getElementById("sellerName").value = "";
+
         document.getElementById("itemTitle").value = "";
+
         document.getElementById("itemPrice").value = "";
+
         document.getElementById("itemDescription").value = "";
+
         document.getElementById("itemImageFile").value = "";
 
+
+
     }catch(error){
+
         console.error(error);
+
         if(!navigator.onLine){
+
             alert("You're offline. Please check your connection and try again.");
+
         }else if(error.message === "TIMEOUT"){
+
             alert("Upload timed out — your connection may be too slow right now. Please try again, or try a smaller image.");
+
         }else if(error.message === "NETWORK"){
+
             alert("Network error during upload. Please check your connection and try again.");
+
         }else if(error.code === "unavailable" || error.message?.includes("network")){
+
             alert("Your image was uploaded, but saving the product kept failing due to a weak connection. Please try posting again — you may need to re-select the image.");
+
         }else{
+
             alert(error.message);
+
         }
+
     }finally{
+
         setBtnState("Post Product", false);
+
     }
 
+
+
 }
+
+
 
 function displayItems(){
 
+
+
     const feed = document.getElementById("itemFeed");
+
     if(!feed) return;
 
+
+
     db.collection("items")
+
     .orderBy("createdAt", "desc")
+
     .onSnapshot(snapshot=>{
+
+
 
         feed.innerHTML = "";
 
+
+
         const currentUser = auth.currentUser;
+
+
 
         snapshot.forEach(doc=>{
 
+
+
             const item = doc.data();
+
             const isOwner = currentUser && (currentUser.email === item.sellerEmail || (!item.sellerEmail && isAdmin()));
 
+
+
             feed.innerHTML += `
+
             <div class="card" id="item-${doc.id}">
+
                 <img src="${item.imageUrl}" alt="${item.title}">
+
                 <div class="card-body">
+
                     <h3>${item.title}</h3>
+
                     <p class="price">₦${item.price}</p>
+
                     <p class="small">${item.description}</p>
+
                     <p class="small">
+
                         Seller:
+
                         <span onclick="openSellerProfile('${item.seller}')" style="color:gold; cursor:pointer;">
+
                             ${item.seller}
+
                         </span>
+
                     </p>
+
                     <button onclick="payForItem('${item.title}', ${item.price}, '${item.seller}', '${doc.id}')">
+
                         Buy Now
+
                     </button>
+
                     <button class="alt" onclick="openChat('${doc.id}', '${item.sellerEmail}')">
+
                         Chat Seller
+
                     </button>
+
                     ${isOwner ? `
+
                     <button class="btn-danger" onclick="deleteItem('${doc.id}')">
+
                         Delete Listing
+
                     </button>
+
                     ` : ""}
+
                 </div>
+
             </div>
+
             `;
+
+
 
         });
 
+
+
+        applyItemSearchFilter();
+
+
+
     });
 
+
+
 }
+
+
 
 function openProductDetails(itemId){
 
+
+
     showPage("itemFeedPage");
 
+
+
     // Give the feed a moment to render before scrolling to the target card
+
     setTimeout(()=>{
+
         const card = document.getElementById(`item-${itemId}`);
+
         if(card){
+
             card.scrollIntoView({ behavior: "smooth", block: "center" });
+
             card.style.transition = "box-shadow 0.3s";
+
             card.style.boxShadow = "0 0 0 3px gold";
+
             setTimeout(()=>{ card.style.boxShadow = ""; }, 2500);
+
         }
+
     }, 400);
+
+
 
 }
 
+
+
 // Deletes a product listing. Only shown/callable for the item's own seller —
+
 // the Firestore rule for the items collection should also check
+
 // request.auth.token.email == resource.data.sellerEmail server-side so this
+
 // can't be bypassed by calling the function directly from devtools.
+
 async function deleteItem(itemId){
 
+
+
     const user = auth.currentUser;
+
     if(!user){
+
         alert("Please login first");
+
         return;
+
     }
 
+
+
     const confirmed = confirm("Delete this listing? This cannot be undone.");
+
     if(!confirmed) return;
+
+
 
     try{
 
+
+
         const docRef = db.collection("items").doc(itemId);
+
         const docSnap = await docRef.get();
 
+
+
         if(!docSnap.exists){
+
             alert("This listing no longer exists.");
+
             return;
+
         }
+
+
 
         const item = docSnap.data();
 
+
+
         if(item.sellerEmail !== user.email && !(!item.sellerEmail && isAdmin())){
+
             alert("You can only delete your own listings.");
+
             return;
+
         }
+
+
 
         await docRef.delete();
+
         logAuditEvent("delete_listing", { itemId: itemId, title: item.title || "", sellerEmail: item.sellerEmail || "" });
+
         alert("Listing deleted.");
 
+
+
     }catch(error){
+
         console.error(error);
+
         if(!navigator.onLine){
+
             alert("You're offline. Please check your connection and try again.");
+
         }else{
+
             alert("Failed to delete listing: " + error.message);
+
         }
+
     }
+
+
 
 }
 
+
+
 // Deletes a freelancer's own service listing. Mirrors deleteItem() above.
+
 // Firestore rule for /freelancers/{freelancerId} requires the document ID
+
 // itself to equal request.auth.uid, so ownership is checked the same way.
+
 async function deleteFreelancerListing(freelancerId){
 
+
+
     const user = auth.currentUser;
+
     if(!user){
+
         alert("Please login first");
+
         return;
+
     }
+
+
 
     if(user.uid !== freelancerId){
+
         alert("You can only delete your own listing.");
+
         return;
+
     }
 
+
+
     const confirmed = confirm("Delete this freelancer listing? This cannot be undone.");
+
     if(!confirmed) return;
+
+
 
     try{
 
+
+
         const docRef = db.collection("freelancers").doc(freelancerId);
+
         const docSnap = await docRef.get();
 
+
+
         if(!docSnap.exists){
+
             alert("This listing no longer exists.");
+
             return;
+
         }
+
+
 
         await docRef.delete();
+
         logAuditEvent("delete_freelancer_listing", { freelancerId: freelancerId });
+
         alert("Listing deleted.");
 
+
+
     }catch(error){
+
         console.error(error);
+
         if(!navigator.onLine){
+
             alert("You're offline. Please check your connection and try again.");
+
         }else{
+
             alert("Failed to delete listing: " + error.message);
+
         }
+
     }
+
+
 
 }
 
+
+
 document.addEventListener("DOMContentLoaded", ()=>{
+
     if(document.getElementById("itemFeed")){
+
         displayItems();
+
         // Re-render once login is confirmed, so the "Delete Listing" button
+
         // (which depends on knowing who's logged in) shows up correctly.
+
         // Without this, if the page draws before auth resolves, every card
+
         // renders as if no one is logged in and never redraws.
+
         auth.onAuthStateChanged(()=>{
+
             displayItems();
+
         });
+
     }
+
 });
+
+
+
 /* ==================================
+
 PRODUCT PAYMENT (tiered commission)
+
 ================================== */
+
+
 
 function payForItem(title, price, seller, itemId){
 
+
+
     const user = auth.currentUser;
 
+
+
     if(!user){
+
         alert("Please login first");
+
         return;
+
     }
 
+
+
     const basePrice = Number(price);
+
     const appFee = calculateCommission(basePrice);
+
     const totalCharge = basePrice + appFee;
 
+
+
     // Show the buyer a clear price breakdown (item price vs. platform fee)
+
     // before opening the payment popup, instead of only ever seeing one
+
     // lump total with no explanation of what it's made of.
+
     const breakdownMessage =
+
         "Order Summary\n\n" +
+
         "Item: " + title + "\n" +
+
         "Item Price: \u20A6" + basePrice.toLocaleString() + "\n" +
+
         "Platform Fee: \u20A6" + appFee.toLocaleString() + "\n" +
+
         "-----------------------------\n" +
+
         "Total to Pay: \u20A6" + totalCharge.toLocaleString() + "\n\n" +
+
         "Press OK to continue to secure payment.";
 
+
+
     const confirmedBreakdown = confirm(breakdownMessage);
+
     if(!confirmedBreakdown) return;
+
+
 
     FlutterwaveCheckout({
 
+
+
         public_key: "FLWPUBK-10783948c6fa8ead4ce8e667a24a3d51-X",
+
         tx_ref: "KM-" + Date.now(),
+
         amount: totalCharge,
+
         currency: "NGN",
+
         payment_options: "card,banktransfer,ussd",
+
+
 
         customer:{ email:user.email, name:user.email },
 
+
+
         customizations:{
+
             title: "Karmas Market",
+
             description: title + " - Item: \u20A6" + basePrice.toLocaleString() + " + Fee: \u20A6" + appFee.toLocaleString()
+
         },
+
+
 
         callback:function(response){
 
+
+
             db.collection("orders").add({
 
+
+
                 buyer: user.email,
+
                 seller,
+
                 itemId: itemId || null,
+
                 title,
+
                 totalPaid: totalCharge,
+
                 sellerAmount: basePrice,
+
                 appFee,
+
                 status: "in_escrow",
+
                 released:false,
+
                 paymentReference: response.tx_ref,
+
                 createdAt: firebase.firestore.FieldValue.serverTimestamp()
+
+
 
             });
 
+
+
             addAppCommission(appFee);
+
+
 
             sendOrderNotification(title);
 
+
+
             alert("Payment secured in escrow");
+
+
 
         },
 
+
+
         onclose:function(){
+
             console.log("Payment window closed");
+
         }
+
+
 
     });
 
+
+
 }
+
+
 
 /* ==================================
 FREELANCER SYSTEM
@@ -1746,6 +2004,42 @@ function approveOrder(orderId){
         })
         .then(()=>{
 
+            const buyerId = order.buyerId || null;
+            if(!buyerId) return;
+
+            return db.collection("users").doc(buyerId).get()
+            .then(buyerDoc=>{
+
+                if(!buyerDoc.exists) return;
+                const buyer = buyerDoc.data();
+
+                if(!buyer.referredBy || buyer.referralRewardGiven) return;
+
+                const REFERRAL_REWARD = 500;
+
+                return addWalletBalance(buyer.referredBy, REFERRAL_REWARD)
+                .then(()=>{
+                    return db.collection("users").doc(buyerId).update({
+                        referralRewardGiven: true
+                    });
+                })
+                .then(()=>{
+                    logAuditEvent("referral_reward_paid", {
+                        referrerId: buyer.referredBy,
+                        referredUserId: buyerId,
+                        amount: REFERRAL_REWARD,
+                        triggeringOrderId: orderId
+                    });
+                })
+                .catch(error=>{
+                    console.log("Referral reward payout failed:", error);
+                });
+
+            });
+
+        })
+        .then(()=>{
+
             // Once payment is fully settled to the seller, the product
             // listing is no longer for sale, so it auto-removes itself
             // from the marketplace instead of sitting there looking
@@ -1787,6 +2081,7 @@ function approveOrder(orderId){
     });
 
 }
+
 /* ==================================
 CHAT SYSTEM (privacy-filtered)
 Renders into the Messenger-style markup
@@ -2089,6 +2384,55 @@ function loadWallet(){
 
 }
 
+function loadReferralInfo(){
+
+    const user = auth.currentUser;
+    if(!user) return;
+
+    const box = document.getElementById("referralLink");
+    if(!box) return;
+
+    db.collection("users").doc(user.uid).get()
+    .then(doc=>{
+
+        if(!doc.exists || !doc.data().referralCode){
+            box.innerText = "Referral link unavailable — please contact support.";
+            return;
+        }
+
+        const code = doc.data().referralCode;
+        const link = `${window.location.origin}${window.location.pathname.replace("home.html","")}index.html?ref=${code}`;
+
+        box.innerText = link;
+        box.dataset.referralLink = link;
+
+    })
+    .catch(error=>{
+        console.log("Referral info load failed:", error);
+        box.innerText = "Couldn't load your referral link. Please try again.";
+    });
+
+}
+
+function copyReferralLink(){
+
+    const box = document.getElementById("referralLink");
+    if(!box || !box.dataset.referralLink){
+        alert("Referral link isn't ready yet — please wait a moment and try again.");
+        return;
+    }
+
+    navigator.clipboard.writeText(box.dataset.referralLink)
+    .then(()=>{
+        alert("✅ Referral link copied! Share it on WhatsApp, Instagram, anywhere.");
+    })
+    .catch(error=>{
+        console.log("Copy failed:", error);
+        alert("Couldn't copy automatically — please select and copy the link manually.");
+    });
+
+}
+
 function addWalletBalance(userId, amount){
 
     return db.collection("wallets").doc(userId).set({
@@ -2106,324 +2450,643 @@ function deductWalletBalance(userId, amount){
 }
 
 /* ==================================
+
 SELLER PROFILE SYSTEM
+
 ================================== */
 
+
+
 function openSellerProfile(sellerName){
+
     showPage("sellerProfilePage");
+
     loadSellerProfile(sellerName);
+
     loadSellerProducts(sellerName);
+
 }
+
+
 
 function loadSellerProfile(sellerName){
 
+
+
     const container = document.getElementById("sellerProfile");
+
     if(!container) return;
 
+
+
     db.collection("sellers")
+
     .where("name", "==", sellerName)
+
     .get()
+
     .then(snapshot=>{
+
+
 
         container.innerHTML = "";
 
+
+
         if(snapshot.empty){
+
             container.innerHTML = `<div class="profile-box"><h2>Seller Not Found</h2></div>`;
+
             return;
+
         }
 
+
+
         snapshot.forEach(doc=>{
+
+
 
             const seller = doc.data();
 
+
+
             container.innerHTML = `
+
             <div class="profile-box">
+
                 <img src="${seller.image || 'https://via.placeholder.com/150'}"
+
                      style="width:120px; height:120px; border-radius:50%; object-fit:cover; margin-bottom:15px;">
+
                 <h2>${seller.name}</h2>
+
                 <p class="small">${seller.bio || ""}</p>
+
                 <p class="small">${seller.email || ""}</p>
+
             </div>
+
             `;
+
+
 
         });
 
+
+
     });
 
+
+
 }
+
+
 
 function loadSellerProducts(sellerName){
 
+
+
     const container = document.getElementById("sellerProducts");
+
     if(!container) return;
 
+
+
     db.collection("items")
+
     .where("seller", "==", sellerName)
+
     .onSnapshot(snapshot=>{
 
+
+
         container.innerHTML = "";
+
+
 
         const currentUser = auth.currentUser;
 
+
+
         snapshot.forEach(doc=>{
 
+
+
             const item = doc.data();
+
             // This is the public seller-profile view, so the delete button
+
             // is only shown when the person viewing it is the owner —
+
             // everyone else just sees the listing with no delete control.
+
             // Fallback: legacy listings created before sellerEmail existed have
+
             // no such field at all — let the admin account manage those too.
+
             const isOwner = currentUser && (currentUser.email === item.sellerEmail || (!item.sellerEmail && isAdmin()));
 
+
+
             container.innerHTML += `
+
             <div class="card">
+
                 <img src="${item.imageUrl}">
+
                 <div class="card-body">
+
                     <h3>${item.title}</h3>
+
                     <p class="price">₦${item.price}</p>
+
                     ${isOwner ? `
+
                     <button class="btn-danger" onclick="deleteItem('${doc.id}')">
+
                         Delete Listing
+
                     </button>
+
                     ` : ""}
+
                 </div>
+
             </div>
+
             `;
+
+
 
         });
 
+
+
     });
 
+
+
 }
+
+
 
 async function createSellerProfile(){
 
+
+
     const user = auth.currentUser;
 
+
+
     if(!user){
+
         alert("Please login first");
+
         return;
+
     }
 
+
+
     const sellerName = sanitizeText(document.getElementById("sellerProfileName")?.value || "");
+
     const sellerBio = sanitizeText(document.getElementById("sellerProfileBio")?.value || "");
+
     const sellerImage = document.getElementById("sellerProfileImage")?.value || "";
 
+
+
     try{
+
+
 
         await db.collection("sellers").doc(user.uid).set({
 
+
+
             uid: user.uid,
+
             email: user.email,
+
             name: sellerName,
+
             bio: sellerBio,
+
             image: sellerImage,
+
             verified:false,
+
             sponsored:false,
+
             createdAt: firebase.firestore.FieldValue.serverTimestamp()
 
+
+
         });
+
+
 
         alert("Seller profile created");
 
+
+
     }catch(error){
+
         console.log(error);
+
         alert(error.message);
+
     }
 
+
+
 }
+
+
 
 function loadCurrentSellerProfile(){
 
+
+
     const user = auth.currentUser;
+
     if(!user) return;
 
+
+
     db.collection("sellers").doc(user.uid).get()
+
     .then(doc=>{
+
+
 
         if(!doc.exists) return;
 
+
+
         const seller = doc.data();
+
         const box = document.getElementById("sellerProfileInfo");
+
         if(!box) return;
 
+
+
         box.innerHTML = `
+
         <div class="profile-box">
+
             <img src="${seller.image || ''}" style="width:100px; height:100px; border-radius:50%; object-fit:cover;">
+
             <h2>${seller.name || ""}</h2>
+
             <p>${seller.bio || ""}</p>
+
             <p>${seller.email || ""}</p>
+
         </div>
+
         `;
+
+
 
     });
 
+
+
 }
 
+
+
 function openSellerDashboard(){
+
     showPage("sellerDashboard");
+
     loadSellerStats();
+
     loadSellerProductsForCurrentUser();
+
     loadSellerSubscription();
+
     loadSellerSales();
+
 }
+
+
 
 function loadSellerProductsForCurrentUser(){
 
+
+
     const user = auth.currentUser;
+
     if(!user) return;
 
+
+
     const container = document.getElementById("sellerProductsFeed");
+
     if(!container) return;
 
+
+
     db.collection("items")
+
     .where("sellerEmail", "==", user.email)
+
     .onSnapshot(snapshot=>{
+
+
 
         container.innerHTML = "";
 
+
+
         snapshot.forEach(doc=>{
+
+
 
             const item = doc.data();
 
+
+
             container.innerHTML += `
+
             <div class="card">
+
                 <img src="${item.imageUrl}">
+
                 <div class="card-body">
+
                     <h3>${item.title}</h3>
+
                     <p class="price">₦${item.price}</p>
+
                     <button onclick="deleteProduct('${doc.id}')">Delete</button>
+
                 </div>
+
             </div>
+
             `;
+
+
 
         });
 
+
+
     });
 
+
+
 }
+
 async function deleteProduct(productId){
 
+
+
     const user = auth.currentUser;
+
     if(!user) return;
 
+
+
     const confirmDelete = confirm("Delete this product?");
+
     if(!confirmDelete) return;
 
+
+
     try{
+
+
 
         const doc = await db.collection("items").doc(productId).get();
 
+
+
         if(doc.exists && doc.data().sellerEmail !== user.email && !isAdmin()){
+
             alert("You can only delete your own products.");
+
             return;
+
         }
 
+
+
         await db.collection("items").doc(productId).delete();
+
         logAuditEvent("delete_listing", { itemId: productId, byAdmin: isAdmin() });
+
         alert("Product deleted");
 
+
+
     }catch(error){
+
         console.log(error);
+
         alert(error.message);
+
     }
 
+
+
 }
+
+
 
 function loadSellerStats(){
 
+
+
     const user = auth.currentUser;
+
     if(!user) return;
 
+
+
     db.collection("items")
+
     .where("sellerEmail", "==", user.email)
+
     .get()
+
     .then(snapshot=>{
 
+
+
         const totalProducts = document.getElementById("sellerTotalProducts");
+
         if(totalProducts){
+
             totalProducts.innerText = snapshot.size;
+
         }
+
+
 
     });
 
+
+
 }
+
+
 
 function loadSellerSubscription(){
 
+
+
     const user = auth.currentUser;
+
     if(!user) return;
 
+
+
     const box = document.getElementById("sellerSubscriptionStatus");
+
     if(!box) return;
 
+
+
     db.collection("subscriptions")
+
     .where("email", "==", user.email)
+
     .get()
+
     .then(snapshot=>{
+
+
 
         box.innerHTML = snapshot.empty ? "Free Plan" : "Premium Seller";
 
+
+
     });
 
+
+
 }
+
+
 
 function loadSellerSales(){
 
+
+
     const user = auth.currentUser;
+
     if(!user) return;
 
+
+
     db.collection("orders")
+
     .where("sellerEmail", "==", user.email)
+
     .get()
+
     .then(snapshot=>{
+
+
 
         let sales = 0;
 
+
+
         snapshot.forEach(doc=>{
+
             const order = doc.data();
+
             sales += Number(order.totalPaid || 0);
+
         });
 
+
+
         const salesBox = document.getElementById("sellerSales");
+
         if(salesBox){
+
             salesBox.innerText = "₦" + sales;
+
         }
+
+
 
     });
 
+
+
 }
+
+
 
 async function featureProduct(productId){
 
+
+
     try{
 
+
+
         await db.collection("items").doc(productId).update({ featured:true });
+
         alert("Product featured");
 
+
+
     }catch(error){
+
         console.log(error);
+
         alert(error.message);
+
     }
 
+
+
 }
+
+
 
 async function promoteProduct(productId){
 
+
+
     try{
 
+
+
         await db.collection("items").doc(productId).update({
+
             featured:true,
+
             promoted:true
+
         });
+
+
 
         alert("Product promoted");
 
+
+
     }catch(error){
+
         console.log(error);
+
     }
 
+
+
 }
+
 /* ==================================
 APP MARKETPLACE
 ================================== */
@@ -3195,6 +3858,7 @@ function loadTemplates(){
     });
 
 }
+
 /* ==================================
 CONTACT FORM
 ================================== */
@@ -3308,7 +3972,6 @@ async function unbanUser(userId){
     }
 
 }
-
 /* ==================================
 ADMIN — PRODUCTS
 ================================== */
@@ -3965,6 +4628,8 @@ function loadWithdrawalHistory(){
     });
 
 }
+
+
 /* ==================================
 APP INITIALIZATION
 ================================== */
@@ -3979,6 +4644,7 @@ function initializeAppData(){
         if(document.getElementById("templateFeed")) loadTemplates();
         if(document.getElementById("conversationList")) loadConversations();
         if(document.getElementById("walletBalance")) loadWallet();
+        if(document.getElementById("referralLink")) loadReferralInfo();
         if(document.getElementById("ordersFeed")) loadOrders();
         if(document.getElementById("withdrawalHistory")) loadWithdrawalHistory();
 

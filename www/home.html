@@ -513,6 +513,7 @@ header h1{ font-size:24px; }
   </div>
 
 </section>
+
 <!-- =====================================================
      CONVERSATIONS PAGE — FACEBOOK / MESSENGER STYLE
      Full chat list. Tapping a conversation-item calls
@@ -568,6 +569,19 @@ header h1{ font-size:24px; }
         <button class="withdraw-btn" onclick="showWithdrawalForm()" style="margin:0;">Request Withdrawal</button>
       </div>
     </div>
+
+    <!-- Referral card: code and link are filled in by loadReferralInfo()
+         in app.js, called whenever walletPage is opened. -->
+    <div class="wallet-card" style="margin-top:15px;">
+      <h2>Invite &amp; Earn</h2>
+      <p class="wallet-label">Earn ₦500 when someone you refer completes their first order</p>
+      <div id="referralLink" style="background:#1a1a1a; border-radius:8px; padding:12px; margin:12px 0; word-break:break-all; font-size:13px; color:#4ade80;">
+        Loading your referral link...
+      </div>
+      <div class="wallet-actions">
+        <button class="withdraw-btn" onclick="copyReferralLink()" style="margin:0;">Copy Referral Link</button>
+      </div>
+    </div>
   </div>
 
 </section>
@@ -613,7 +627,6 @@ header h1{ font-size:24px; }
   </div>
 
 </section>
-
 <!-- =====================================================
      ANALYTICS PAGE — REDESIGNED
      Uses existing .analytics-grid / .analytics-card /
@@ -769,6 +782,7 @@ header h1{ font-size:24px; }
     <p class="small">Firebase and Flutterwave may set their own cookies which we do not control.</p>
   </div>
 </section>
+
 <!-- REFUND POLICY -->
 <section id="refundPage" class="page">
   <h2 class="page-title">Refund Policy</h2>
